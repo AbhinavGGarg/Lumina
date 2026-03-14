@@ -16,7 +16,10 @@ Each finding must match this schema:
   }
 ]
 
-If there are no real security findings, return an empty array: []
+CRITICAL RULES FOR IGNORING FALSE POSITIVES:
+1. "No vulnerability found", "Tool output clean", "0 vulnerabilities", or "No sensitive data found" are NOT security findings. Do NOT create findings just to report that a tool ran successfully.
+2. If a tool prints a log level like `[CRITICAL]` or `[ERROR]` but the actual message is "no forms found", "could not connect", or "skipping", this is NOT a vulnerability. 
+3. If there are no real, actionable security flaws indicating a weakness in the target, you MUST return an empty array: []
 """
 
 REPORT_SYSTEM = (

@@ -1,38 +1,40 @@
-FROM python:3.13-slim AS base
-
-ARG TARGETARCH
-
-# System packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    nmap curl git wget ruby-full nodejs npm \
-    && rm -rf /var/lib/apt/lists/*
-
-# ── Go (for httpx and dalfox) ─────────────────────────────────────────────────
-ENV GO_VERSION=1.22.3
-RUN wget -q "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
-    && tar -C /usr/local -xzf "go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
-    && rm "go${GO_VERSION}.linux-${TARGETARCH}.tar.gz"
-ENV PATH=$PATH:/usr/local/go/bin:/root/go/bin
-
+# ── Stage 1: Build Go Binaries ────────────────────────────────────────────────
+FROM golang:latest AS go-builder
 RUN go install github.com/projectdiscovery/httpx/cmd/httpx@latest
 RUN go install github.com/hahwul/dalfox/v2@latest
-RUN go install github.com/trufflesecurity/trufflehog/v3@latest
 
-# ── Ruby tools ────────────────────────────────────────────────────────────────
-RUN gem install whatweb --no-document 2>/dev/null || echo "WhatWeb install skipped"
+# ── Stage 2: Final Minimal Runtime ────────────────────────────────────────────
+FROM python:3.13-slim
 
-# ── Python security tools ─────────────────────────────────────────────────────
+# Install only the system dependencies required at runtime
+# (nmap for scanning, git/curl for trufflehog, whatweb natively)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nmap \
+    git \
+    curl \
+    whatweb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy compiled Go binaries from stage 1
+COPY --from=go-builder /go/bin/httpx /usr/local/bin/
+COPY --from=go-builder /go/bin/dalfox /usr/local/bin/
+
+# Install Trufflehog using the official script (go install breaks on replace directives)
+RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+
+# Python security tools and uv
 RUN pip install --no-cache-dir \
     semgrep \
     bandit \
     pip-audit \
     detect-secrets \
-    sqlmap
+    sqlmap \
+    uv
 
-# ── App dependencies ──────────────────────────────────────────────────────────
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN pip install uv && uv sync --frozen --no-dev
+# Install project dependencies
+RUN uv sync --frozen --no-dev
 
 COPY backend/ ./backend/
 

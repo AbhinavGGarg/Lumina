@@ -1,57 +1,52 @@
-# Modern Next.js + FastAPI Template
+# Pulse - Autonomous Penetration Testing Agent
 
-A clean, modern, full-stack template with Next.js 16, FastAPI, Tailwind CSS 4, and shadcn/ui.
-
-<img src="public/image.png" alt="Modern Next.js + FastAPI Template" width="auto">
-
-## Tech Stack
-
-**Frontend:** [`Next.js 16 (Turbopack)`](https://nextjs.org/docs) · [`Tailwind CSS 4`](https://tailwindcss.com/docs) · [`shadcn/ui`](https://ui.shadcn.com/docs/components) · [`Lucide React`](https://lucide.dev/icons/) · [`Sonner`](https://sonner.emilkowal.ski/) · [`Motion`](https://motion.dev/docs/react)
-
-**Backend:** [`FastAPI`](https://fastapi.tiangolo.com/) · `Python 3.13+`
-
-**Linting:** [`Ruff`](https://docs.astral.sh/ruff/) (Python) · [`ESLint`](https://eslint.org/docs/latest/) (TypeScript)
-
-**Package Managers:** [`pnpm`](https://pnpm.io/) (TypeScript) · [`uv`](https://docs.astral.sh/uv/) (Python)
+Pulse is an intelligent, agent-driven penetration testing platform built with Next.js, FastAPI, and LangGraph. It automatically fingerprints repositories or web targets, dynamically selects the appropriate suite of security tools, and uses LLMs to interpret the raw output to generate actionable vulnerability reports.
 
 ## Prerequisites
 
-- [pnpm](https://pnpm.io/installation) — fast Node.js package manager
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) — fast Python package manager
+- **Docker & Docker Compose** (Required for the backend to run security tools like `nmap`, `sqlmap`, `trufflehog`, etc.)
+- **pnpm** (Required to run the frontend natively)
+- **Ollama** (Required locally for the LLM inference. MacOS users must run `launchctl setenv OLLAMA_HOST "0.0.0.0"` before starting Ollama to allow Docker to connect).
 
-## Quick Start
+## Quick Start (Development)
+
+The backend relies on numerous Linux-based security binaries (Go tools, Ruby scripts, C packages). To ensure everything runs smoothly without contaminating your local machine, the backend runs entirely inside Docker, while you run the frontend natively for fast hot-reloading.
+
+### 1. Start the Backend & Target Sandbox
+Run this command from the root of the project to spin up the FastAPI backend and a local vulnerable target (OWASP Juice Shop) for testing:
 
 ```bash
-# Install dependencies
-pnpm install && uv sync
+docker compose -f docker-compose.dev.yml up -d --build
+```
+*The backend will be available at `http://localhost:8000`*
 
-# Run frontend (localhost:3000)
+### 2. Start the Frontend
+Run this natively on your machine:
+```bash
+pnpm install
 pnpm dev
-
-# Run backend (localhost:8000)
-uv run fastapi dev backend/main.py
 ```
+*The frontend will be available at `http://localhost:3000`*
 
-## Project Structure
+## Docker Commands Cheat Sheet
 
-```
-app/            -> Next.js frontend
-backend/        -> FastAPI backend
-components/ui/  -> shadcn/ui components
-```
+If you modify the Python backend codebase, the changes will hot-reload automatically inside the container. 
 
-## Commands
+However, if you need to manually interact with the Dockerized backend, use these commands:
 
 ```bash
-# Add shadcn component (from root directory)
-pnpm dlx shadcn@latest add button
+# View backend live logs (press Ctrl+C to exit)
+docker logs pulse-dev-backend -f
 
-# Linting and formatting
-uv run ruff check --fix backend/
-uv run ruff format backend/
-pnpm run lint --fix
+# Restart the backend container (if you change environment variables or prompts)
+docker restart pulse-dev-backend
+
+# Stop all containers when you are done working
+docker compose -f docker-compose.dev.yml down
 ```
 
-## Licence
+## Running Scans Locally
 
-[MIT License](LICENSE)
+Since the backend runs inside a Docker virtual network, when you want to scan the local OWASP target container, you must use the `host.docker.internal` or container name alias in the UI:
+
+- **Target URL:** `http://pulse-dev-target:3001` or `http://host.docker.internal:3001`
