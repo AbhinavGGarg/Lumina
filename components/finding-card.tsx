@@ -60,7 +60,7 @@ export function FindingCard({ finding, index }: Props) {
               {expanded ? "Hide evidence" : "Show evidence"}
             </button>
             {expanded && (
-              <pre className="text-xs bg-muted rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words">
+              <pre className="text-xs bg-muted rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-all">
                 {finding.evidence}
               </pre>
             )}

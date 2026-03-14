@@ -25,7 +25,9 @@ app.add_middleware(
 # ── Allowlist enforcement ─────────────────────────────────────────────────────
 
 import os
+
 ALLOWED_TARGETS = os.getenv("ALLOWED_TARGETS", "target,localhost,127.0.0.1").split(",")
+
 
 def _validate_target(target: str) -> None:
     if target.startswith("/repos/") or target.startswith("/tmp/"):
@@ -36,11 +38,12 @@ def _validate_target(target: str) -> None:
     if not any(host == t or host.endswith(f".{t}") for t in ALLOWED_TARGETS):
         raise HTTPException(
             status_code=400,
-            detail=f"Target '{host}' is not in the allowlist. Allowed: {ALLOWED_TARGETS}"
+            detail=f"Target '{host}' is not in the allowlist. Allowed: {ALLOWED_TARGETS}",
         )
 
 
 # ── Background scan task ──────────────────────────────────────────────────────
+
 
 async def _run_scan(scan_id: str, target: str) -> None:
     state = scans[scan_id]
@@ -59,6 +62,7 @@ async def _run_scan(scan_id: str, target: str) -> None:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @app.get("/hello")
 def hello():
     """Health check — kept for backwards compatibility."""
@@ -66,7 +70,9 @@ def hello():
 
 
 @app.post("/api/scan")
-async def start_scan(body: ScanRequest, background_tasks: BackgroundTasks) -> ScanResponse:
+async def start_scan(
+    body: ScanRequest, background_tasks: BackgroundTasks
+) -> ScanResponse:
     """Start a new automated penetration test scan."""
     _validate_target(body.target)
     scan_id = str(uuid.uuid4())
