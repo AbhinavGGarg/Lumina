@@ -20,87 +20,17 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
 
-from backend.callbacks import ScanStreamCallback
-from backend.llm import get_llm
-from backend.models import Finding, ScanStatus, Severity
-from backend.planner import plan
-from backend.tools.dependencies import run_npm_audit, run_pip_audit
-from backend.tools.injection import run_dalfox, run_sqlmap
-from backend.tools.recon import run_httpx, run_nmap, run_whatweb
-from backend.tools.secrets import run_detect_secrets, run_trufflehog
-from backend.tools.static_analysis import run_bandit, run_semgrep
-from backend.tools.static_c import run_cppcheck, run_semgrep_c
-
-
-# ── Prompts ───────────────────────────────────────────────────────────────────
-
-_INTERPRET_SYSTEM = """You are a penetration tester analysing security tool output.
-
-Extract security findings from the tool output below.
-Return ONLY a JSON array -- no markdown, no explanation, no backticks.
-
-Each finding must match this schema:
-[
-  {
-    "severity": "critical|high|medium|low|info",
-    "title": "short title",
-    "description": "what the vulnerability is",
-    "evidence": "relevant snippet from tool output (max 200 chars)",
-    "remediation": "how to fix it"
-  }
-]
-
-If there are no real security findings, return an empty array: []
-"""
-
-_REPORT_SYSTEM = (
-    "You are a senior penetration tester writing a professional vulnerability report. "
-    "Write clear, concise Markdown. Be direct. Do not pad with unnecessary text.\n"
-    "CRITICAL: Base your report ONLY on the provided findings from automated scans. "
-    "DO NOT invent, guess, or hallucinate findings. DO NOT write about 'manual analysis'."
-)
-
-_REPORT_PROMPT = """Write a penetration testing report for target: {target}
-
-Languages detected: {languages}
-
-Findings from automated scans:
-{findings}
-
-Format:
-# Vulnerability Report -- {target}
-
-## Executive Summary
-(2-3 sentences summarising the overall security posture based strictly on the findings above.)
-
-## Findings
-(If the findings array is empty, state: "No vulnerabilities were detected during automated scans." and DO NOT include the table.)
-
-| # | Severity | Title | Tool |
-|---|---|---|---|
-(Table of findings, or omit if none)
-
-## Detailed Findings
-(If there are no findings, omit this section entirely.)
-(For each finding:)
-### [N]. Title
-**Severity:** critical/high/medium/low/info
-**Tool:** tool name
-
-**Description:** ...
-
-**Evidence:**
-```
-evidence snippet
-```
-
-**Remediation:** ...
-
----
-
-## Risk Score: X/10
-(Brief justification based ONLY on the actual findings listed above. If there are 0 findings, the score is 0/10.)
-"""
+from ..core.data_models import Finding, ScanStatus, Severity
+from ..core.prompts import INTERPRET_SYSTEM, REPORT_PROMPT, REPORT_SYSTEM
+from ..tools.dependencies import run_npm_audit, run_pip_audit
+from ..tools.injection import run_dalfox, run_sqlmap
+from ..tools.recon import run_httpx, run_nmap, run_whatweb
+from ..tools.secrets import run_detect_secrets, run_trufflehog
+from ..tools.static_analysis import run_bandit, run_semgrep
+from ..tools.static_c import run_cppcheck, run_semgrep_c
+from .callbacks import ScanStreamCallback
+from .llm_service import get_llm
+from .planner_service import plan
 
 
 # ── Graph State ───────────────────────────────────────────────────────────────
@@ -206,7 +136,7 @@ def _update_store(
     """
     if not scan_id:
         return
-    from backend.state_store import scans  # avoid circular at module level
+    from ..db.scans import scans  # avoid circular at module level
     if scan_id not in scans:
         return
     state = scans[scan_id]
@@ -247,7 +177,7 @@ def _llm_interpret(
     callback = ScanStreamCallback(scan_id=scan_id, agent=agent)
     llm = get_llm().with_config({"callbacks": [callback]})
     prompt = (
-        _INTERPRET_SYSTEM
+        INTERPRET_SYSTEM
         + f"\n\nAgent: {agent}\nTools: {tool_label}\nOutput:\n"
         + _truncate(combined)
     )
@@ -273,7 +203,7 @@ def planner_node(state: GraphState) -> dict:
     )
 
     if state.scan_id:
-        from backend.state_store import scans
+        from ..db.scans import scans
         if state.scan_id in scans:
             store = scans[state.scan_id]
             store.target_type = scan_plan.target_type
@@ -338,7 +268,7 @@ def sqli_node(state: GraphState) -> dict:
             state.scan_id, "sql_injection",
             f"[SKIP] sqlmap unavailable: {result.get('error', '')}",
             [],
-        )
+            )
         return {"findings": state.findings}
 
     findings = _llm_interpret(state.scan_id, "sql_injection", "sqlmap", result)
@@ -578,7 +508,7 @@ def report_node(state: GraphState) -> dict:
 
     findings_text = _truncate(state.findings, max_chars=6000)
     languages_str = ", ".join(state.languages) if state.languages else "N/A"
-    prompt = _REPORT_PROMPT.format(
+    prompt = REPORT_PROMPT.format(
         target=state.target,
         languages=languages_str,
         findings=findings_text,
@@ -586,11 +516,11 @@ def report_node(state: GraphState) -> dict:
 
     callback = ScanStreamCallback(scan_id=state.scan_id, agent="report")
     llm = get_llm().with_config({"callbacks": [callback]})
-    response = llm.invoke([HumanMessage(content=_REPORT_SYSTEM + "\n\n" + prompt)])
+    response = llm.invoke([HumanMessage(content=REPORT_SYSTEM + "\n\n" + prompt)])
     report = response.content
 
     if state.scan_id:
-        from backend.state_store import scans
+        from ..db.scans import scans
         if state.scan_id in scans:
             scans[state.scan_id].report        = report
             scans[state.scan_id].current_agent = "complete"

@@ -9,7 +9,7 @@ import logging
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-from backend.state_store import scans
+from ..db.scans import scans
 
 
 class ScanStreamCallback(BaseCallbackHandler):
