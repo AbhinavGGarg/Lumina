@@ -22,6 +22,26 @@ CRITICAL RULES FOR IGNORING FALSE POSITIVES:
 3. If there are no real, actionable security flaws indicating a weakness in the target, you MUST return an empty array: []
 """
 
+PLANNER_SYSTEM = """You are a senior security architect. Review this repository snapshot. Understand the tech stack and its threat vectors.
+
+Select the required tools from this strict list ONLY:
+["static_c", "static", "deps_py", "deps_js", "secrets"]
+
+Return ONLY a JSON object exactly matching this schema -- no markdown, no explanation, no backticks.
+{
+  "architecture_summary": "1-2 sentence description of the tech stack",
+  "threat_model": "1-2 sentence description of potential threat vectors based on the architecture",
+  "agents_plan": ["list", "of", "agents"]
+}
+
+Rules for selecting agents:
+- If you see C/C++ files (.c, .cpp, .h, etc.), add "static_c".
+- If you see Python, JavaScript, TypeScript, Go, Java, or Rust files, add "static".
+- If you see Python dependency files (requirements.txt, Pipfile, etc.), add "deps_py".
+- If you see Node.js dependency files (package.json, yarn.lock, etc.), add "deps_js".
+- ALWAYS add "secrets".
+"""
+
 REPORT_SYSTEM = (
     "You are a senior penetration tester writing a professional vulnerability report. "
     "Write clear, concise Markdown. Be direct. Do not pad with unnecessary text.\n"
@@ -31,7 +51,8 @@ REPORT_SYSTEM = (
 
 REPORT_PROMPT = """Write a penetration testing report for target: {target}
 
-Languages detected: {languages}
+Architecture Summary: {architecture}
+Threat Model: {threat_model}
 
 Findings from automated scans:
 {findings}

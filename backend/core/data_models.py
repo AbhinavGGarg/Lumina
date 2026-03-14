@@ -31,15 +31,16 @@ class Finding(BaseModel):
 
 
 class ScanState(BaseModel):
-    scan_id:       str
-    target:        str
-    target_type:   str = ""
-    languages:     list[str] = []
-    status:        ScanStatus = ScanStatus.pending
-    current_agent: str = ""
-    agents_plan:   list[str] = []
-    findings:      list[Finding] = []
-    log:           list[str] = []
+    scan_id:              str
+    target:               str
+    target_type:          str = ""
+    architecture_summary: str = ""
+    threat_model:         str = ""
+    status:               ScanStatus = ScanStatus.pending
+    current_agent:        str = ""
+    agents_plan:          list[str] = []
+    findings:             list[Finding] = []
+    log:                  list[str] = []
     # Raw LLM token stream -- each entry is one token or a control sentinel.
     # Sentinels: "\x00START:<agent>" opens a block, "\x00END" closes it.
     llm_log:       list[str] = []

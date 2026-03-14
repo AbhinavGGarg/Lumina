@@ -15,7 +15,8 @@ export interface ScanState {
   scan_id: string;
   target: string;
   target_type: string;
-  languages: string[];
+  architecture_summary: string;
+  threat_model: string;
   status: ScanStatus;
   current_agent: string;
   agents_plan: string[];
