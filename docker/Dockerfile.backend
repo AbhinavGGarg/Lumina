@@ -1,0 +1,40 @@
+FROM python:3.13-slim AS base
+
+ARG TARGETARCH
+
+# System packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nmap curl git wget ruby-full nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Go (for httpx and dalfox) ─────────────────────────────────────────────────
+ENV GO_VERSION=1.22.3
+RUN wget -q "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
+    && tar -C /usr/local -xzf "go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
+    && rm "go${GO_VERSION}.linux-${TARGETARCH}.tar.gz"
+ENV PATH=$PATH:/usr/local/go/bin:/root/go/bin
+
+RUN go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+RUN go install github.com/hahwul/dalfox/v2@latest
+RUN go install github.com/trufflesecurity/trufflehog/v3@latest
+
+# ── Ruby tools ────────────────────────────────────────────────────────────────
+RUN gem install whatweb --no-document 2>/dev/null || echo "WhatWeb install skipped"
+
+# ── Python security tools ─────────────────────────────────────────────────────
+RUN pip install --no-cache-dir \
+    semgrep \
+    bandit \
+    pip-audit \
+    detect-secrets \
+    sqlmap
+
+# ── App dependencies ──────────────────────────────────────────────────────────
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN pip install uv && uv sync --frozen --no-dev
+
+COPY backend/ ./backend/
+
+EXPOSE 8000
+CMD ["uv", "run", "fastapi", "run", "backend/main.py", "--host", "0.0.0.0", "--port", "8000"]
