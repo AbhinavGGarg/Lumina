@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { ScanState } from "@/types/scan";
 import { ScanProgress } from "@/components/scan-progress";
 import { FindingCard } from "@/components/finding-card";
 import { Button } from "@/components/ui/button";
 import { Terminal, ShieldAlert, Cpu } from "lucide-react";
+import { ReportModal } from "@/components/report-modal";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -110,6 +110,10 @@ export default function ScanPage() {
   const router = useRouter();
   const [scan, setScan] = useState<ScanState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportMarkdown, setReportMarkdown] = useState<string | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -135,6 +139,35 @@ export default function ScanPage() {
 
     return () => es.close();
   }, [id]);
+
+  async function openReportModal() {
+    if (!id) return;
+
+    setIsReportOpen(true);
+    setReportLoading(true);
+    setReportError(null);
+
+    try {
+      const response = await fetch(`${API}/api/scan/${id}/report`);
+      const data = await response.json();
+      setReportMarkdown(data.report || "No report generated.");
+    } catch {
+      setReportError("Failed to load detailed report");
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
+  function downloadReport() {
+    if (!reportMarkdown || !id) return;
+    const blob = new Blob([reportMarkdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pulse-report-${id.slice(0, 8)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (error) {
     return (
@@ -213,8 +246,11 @@ export default function ScanPage() {
               + New Target
             </Button>
             {scan.status === "complete" && (
-              <Button asChild className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20 w-full md:w-auto">
-                <Link href={`/report/${id}`}>Detailed Report →</Link>
+              <Button
+                className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20 w-full md:w-auto"
+                onClick={openReportModal}
+              >
+                Detailed Report →
               </Button>
             )}
           </div>
@@ -309,6 +345,17 @@ export default function ScanPage() {
 
         </div>
       </div>
+
+      <ReportModal
+        open={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        report={reportMarkdown}
+        loading={reportLoading}
+        error={reportError}
+        target={scan.target}
+        scanId={scan.scan_id}
+        onDownload={downloadReport}
+      />
     </main>
   );
 }
