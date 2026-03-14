@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -45,45 +44,42 @@ export function ScanForm() {
   }
 
   return (
-    <Card className="w-full max-w-xl">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold">New Scan</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-foreground/80">
-              Target URL or repository path
-            </label>
-            <input
-              type="text"
-              value={target}
-              onChange={e => setTarget(e.target.value)}
-              placeholder="http://target:3000 or /repos/my-app"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2 placeholder:text-muted-foreground"
-            />
-            <p className="text-xs text-muted-foreground">
-              Examples:{" "}
-              {EXAMPLE_TARGETS.map((t, i) => (
-                <span key={t}>
-                  <button
-                    type="button"
-                    className="underline underline-offset-2 hover:text-foreground transition-colors"
-                    onClick={() => setTarget(t)}
-                  >
-                    {t}
-                  </button>
-                  {i < EXAMPLE_TARGETS.length - 1 ? " · " : ""}
-                </span>
-              ))}
-            </p>
-          </div>
-
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Starting scan…" : "▶ Start Scan"}
+    <form onSubmit={handleSubmit} className="w-full relative group">
+      <div className="absolute -inset-0.5 bg-linear-to-r from-purple-500/30 to-blue-500/30 rounded-xl blur opacity-75 group-hover:opacity-100 transition duration-500" />
+      <div className="relative flex items-center bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+        <div className="pl-4 pr-3 py-4 text-white/40 font-mono text-sm">
+          &gt;
+        </div>
+        <input
+          type="text"
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          placeholder="http://target:3000   or   /repos/my-app"
+          className="flex-1 bg-transparent border-none text-white px-2 py-4 outline-none placeholder:text-white/20 font-mono text-sm"
+        />
+        <div className="pr-2">
+          <Button 
+            type="submit" 
+            disabled={loading} 
+            className="bg-white text-black hover:bg-white/90 font-medium px-6 py-5 rounded-lg h-auto"
+          >
+            {loading ? "Initializing..." : "Run Autopilot"}
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/40">
+        <span>Try:</span>
+        {EXAMPLE_TARGETS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            className="hover:text-purple-400 focus:text-purple-400 font-mono transition-colors"
+            onClick={() => setTarget(t)}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+    </form>
   );
 }

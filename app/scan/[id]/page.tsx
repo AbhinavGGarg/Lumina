@@ -7,6 +7,7 @@ import { ScanState } from "@/types/scan";
 import { ScanProgress } from "@/components/scan-progress";
 import { FindingCard } from "@/components/finding-card";
 import { Button } from "@/components/ui/button";
+import { Terminal, ShieldAlert, Cpu } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -44,71 +45,60 @@ function buildReasoningBlocks(llmLog: string[]): ReasoningBlock[] {
 function LlmStreamPanel({ llmLog }: { llmLog: string[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const blocks = buildReasoningBlocks(llmLog);
-  const [expanded, setExpanded] = useState(true);
 
   // Auto-scroll to bottom as tokens arrive.
   useEffect(() => {
-    if (expanded && scrollRef.current) {
+    if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [llmLog, expanded]);
+  }, [llmLog]);
 
   if (blocks.length === 0) return null;
 
   const latestBlock = blocks[blocks.length - 1];
 
   return (
-    <div className="rounded-lg border border-border/60 bg-[#0d0d0d] overflow-hidden">
+    <div className="rounded-xl border border-white/10 bg-[#0d0d0d] overflow-hidden flex flex-col h-full min-h-100 max-h-200 shadow-2xl">
       {/* Header */}
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
-      >
+      <div className="w-full flex items-center justify-between px-5 py-3.5 border-b border-white/5 bg-[#161616]">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-purple-400 uppercase tracking-wide">
-            Agent Reasoning
+          <Terminal className="w-4 h-4 text-purple-400" />
+          <span className="text-xs font-semibold text-white/80 uppercase tracking-widest">
+            Agent Reasoning Console
           </span>
           {!latestBlock.done && (
-            <span className="flex gap-0.5">
+            <span className="flex gap-0.5 ml-2">
               {[0, 1, 2].map((i) => (
                 <span
                   key={i}
-                  className="w-1 h-1 rounded-full bg-purple-400 animate-bounce"
+                  className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-bounce"
                   style={{ animationDelay: `${i * 0.12}s` }}
                 />
               ))}
             </span>
           )}
-          {latestBlock.done && (
-            <span className="text-xs text-muted-foreground">✓ done</span>
-          )}
         </div>
-        <span className="text-xs text-muted-foreground">
-          {expanded ? "▲ collapse" : "▼ expand"}
-        </span>
-      </button>
+      </div>
 
       {/* Stream content */}
-      {expanded && (
-        <div
-          ref={scrollRef}
-          className="max-h-56 overflow-y-auto px-4 pb-3 pt-1"
-        >
-          {blocks.map((block, bi) => (
-            <div key={bi} className="mb-3">
-              <p className="text-[10px] font-mono text-purple-500/70 mb-1 uppercase tracking-widest">
-                [{block.agent}]
-              </p>
-              <p className="font-mono text-xs text-[#c9d1d9] leading-relaxed whitespace-pre-wrap break-all">
-                {block.tokens.join("")}
-                {!block.done && bi === blocks.length - 1 && (
-                  <span className="inline-block w-1.5 h-3.5 bg-purple-400 ml-0.5 animate-pulse align-middle" />
-                )}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-5 py-4 scroll-smooth"
+      >
+        {blocks.map((block, bi) => (
+          <div key={bi} className="mb-6">
+            <p className="text-[11px] font-mono text-purple-400 mb-2 uppercase tracking-widest">
+              &gt; [{block.agent}] process
+            </p>
+            <p className="font-mono text-[13px] text-[#c9d1d9] leading-relaxed whitespace-pre-wrap break-all">
+              {block.tokens.join("")}
+              {!block.done && bi === blocks.length - 1 && (
+                <span className="inline-block w-2 h-4 bg-purple-400 ml-1 animate-pulse align-middle" />
+              )}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -148,16 +138,19 @@ export default function ScanPage() {
 
   if (error) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <p className="text-destructive">{error}</p>
+      <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+        <p className="text-red-400 bg-red-400/10 px-4 py-2 rounded-xl border border-red-400/20">{error}</p>
       </main>
     );
   }
 
   if (!scan) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">Connecting to scan…</p>
+      <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-white/50 text-sm tracking-wide">Connecting to agent stream...</p>
+        </div>
       </main>
     );
   }
@@ -178,105 +171,142 @@ export default function ScanPage() {
   const isRunning = scan.status === "running" || scan.status === "pending";
 
   return (
-    <main className="min-h-screen flex flex-col gap-6 px-4 py-10 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-serif font-semibold">
-            {isRunning ? "Scan in progress" : "Scan complete"}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">
-            {scan.target}
-          </p>
-          {scan.languages.length > 0 && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Detected:{" "}
-              {scan.languages.map((l) => (
-                <span
-                  key={l}
-                  className="inline-block mr-1 px-1.5 py-0.5 rounded bg-muted text-foreground font-mono text-[10px]"
-                >
-                  {l}
-                </span>
-              ))}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={scan.status} />
-          {scan.status === "complete" && (
-            <Button asChild size="sm">
-              <Link href={`/report/${id}`}>View Report →</Link>
-            </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={() => router.push("/")}>
-            ← New Scan
-          </Button>
-        </div>
-      </div>
-
-      {/* Severity summary */}
-      {scan.findings.length > 0 && (
-        <div className="flex gap-3 flex-wrap">
-          {SEVERITY_ORDER.filter((s) => counts[s] > 0).map((s) => (
-            <SeverityCount key={s} severity={s} count={counts[s]} />
-          ))}
-        </div>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-        {/* Left column: agent pipeline + log + LLM stream */}
-        <div className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Agent Pipeline
-          </h2>
-          <ScanProgress scan={scan} />
-
-          {/* System log */}
-          {scan.log.length > 0 && (
-            <div>
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                Log
-              </h3>
-              <div className="text-xs text-muted-foreground font-mono flex flex-col gap-1 max-h-40 overflow-y-auto">
-                {scan.log.map((entry, i) => (
-                  <span
-                    key={i}
-                    className={
-                      entry.startsWith("[SKIP]")
-                        ? "text-yellow-600/70"
-                        : undefined
-                    }
-                  >
-                    {entry}
-                  </span>
-                ))}
-              </div>
+    <main className="min-h-screen bg-[#0a0a0a] text-white flex flex-col px-6 md:px-12 xl:px-24 pt-8 pb-16 font-sans">
+      <div className="w-full max-w-350 mx-auto flex flex-col gap-8">
+        
+        {/* Header Console */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 rounded-2xl border border-white/10 bg-[#111] shadow-2xl relative overflow-hidden">
+          {/* Subtle bg glow */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/5 blur-[100px] pointer-events-none rounded-full" />
+          
+          <div className="flex flex-col items-start gap-2 z-10">
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-serif font-medium tracking-tight">
+                {isRunning ? "Active Operation" : "Operation Complete"}
+              </h1>
+              <StatusBadge status={scan.status} />
             </div>
-          )}
+            
+            <div className="flex flex-wrap items-center gap-3 mt-1">
+              <span className="font-mono text-sm text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">
+                {scan.target}
+              </span>
+              {scan.languages.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs text-white/40">
+                  <span>Languages:</span>
+                  {scan.languages.map((l) => (
+                    <span key={l} className="font-mono text-white/70 bg-white/5 px-1.5 py-px rounded border border-white/10">
+                      {l}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
-          {/* LLM reasoning stream */}
-          {scan.llm_log.length > 0 && (
-            <LlmStreamPanel llmLog={scan.llm_log} />
-          )}
+          <div className="flex items-center gap-3 w-full md:w-auto z-10">
+            <Button 
+              variant="outline" 
+              onClick={() => router.push("/")}
+              className="bg-[#1a1a1a] hover:bg-[#2a2a2a] border-white/10 text-white w-full md:w-auto"
+            >
+              + New Target
+            </Button>
+            {scan.status === "complete" && (
+              <Button asChild className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20 w-full md:w-auto">
+                <Link href={`/report/${id}`}>Detailed Report →</Link>
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Right column: findings */}
-        <div className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Findings ({scan.findings.length})
-          </h2>
-          {sortedFindings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {scan.status === "running"
-                ? "Waiting for first findings…"
-                : "No findings detected."}
-            </p>
-          ) : (
-            sortedFindings.map((f, i) => (
-              <FindingCard key={i} finding={f} index={i} />
-            ))
-          )}
+        {/* 3-Column SaaS Dashboard Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* Column 1: Pipeline & Status (Col Span 3) */}
+          <div className="flex flex-col gap-6 lg:col-span-3">
+            {/* Severity Summary */}
+            {scan.findings.length > 0 && (
+              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg">
+                <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest">
+                  <ShieldAlert className="w-4 h-4 text-white/40" />
+                  Threat Overview
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {SEVERITY_ORDER.filter((s) => counts[s] > 0).map((s) => (
+                    <SeverityCount key={s} severity={s} count={counts[s]} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-4 shadow-lg">
+              <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest">
+                <Cpu className="w-4 h-4 text-white/40" />
+                Execution Pipeline
+              </div>
+              <ScanProgress scan={scan} />
+            </div>
+
+            {/* System Log */}
+            {scan.log.length > 0 && (
+              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg">
+                <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest">
+                  System Transcript
+                </h3>
+                <div className="text-[11px] text-white/40 font-mono flex flex-col gap-1.5 max-h-60 overflow-y-auto pr-2">
+                  {scan.log.map((entry, i) => (
+                    <span
+                      key={i}
+                      className={
+                        entry.startsWith("[SKIP]")
+                          ? "text-yellow-500/60"
+                          : undefined
+                      }
+                    >
+                      {entry}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Column 2: Agent Reasoning Engine (Col Span 5 or 6) */}
+          <div className="lg:col-span-5 h-150 lg:h-auto lg:self-stretch">
+            {scan.llm_log.length > 0 ? (
+              <LlmStreamPanel llmLog={scan.llm_log} />
+            ) : (
+              <div className="h-full rounded-xl border border-white/5 border-dashed flex items-center justify-center p-8 bg-[#111]/50 text-center">
+                <p className="text-sm font-mono text-white/30 tracking-tight">
+                  Awaiting LLM interpretation stream...
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Column 3: Findings (Col Span 4 or 3) */}
+          <div className="flex flex-col gap-4 lg:col-span-4 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg h-150 lg:h-auto lg:self-stretch overflow-y-auto">
+            <h2 className="text-xs font-semibold text-white/50 uppercase tracking-widest flex items-center justify-between sticky top-0 bg-[#111] z-10 pb-2 mb-2 border-b border-white/5 w-full">
+              <span>Discovered Vulnerabilities</span>
+              <span className="bg-white/10 text-white/80 px-2 py-0.5 rounded-full">{scan.findings.length}</span>
+            </h2>
+            
+            <div className="flex flex-col gap-3">
+              {sortedFindings.length === 0 ? (
+                <p className="text-sm text-white/30 text-center py-12">
+                  {scan.status === "running"
+                    ? "Scanning engines active..."
+                    : "No vulnerabilities detected based on current rulesets."}
+                </p>
+              ) : (
+                sortedFindings.map((f, i) => (
+                  <FindingCard key={i} finding={f} index={i} />
+                ))
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
     </main>
@@ -285,14 +315,14 @@ export default function ScanPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    pending:  "bg-muted text-muted-foreground",
-    running:  "bg-blue-500/15 text-blue-600 border border-blue-500/30",
-    complete: "bg-green-500/15 text-green-600 border border-green-500/30",
-    failed:   "bg-destructive/15 text-destructive border border-destructive/30",
+    pending:  "bg-white/10 text-white/60 border border-white/20",
+    running:  "bg-purple-500/10 text-purple-400 border border-purple-500/30",
+    complete: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
+    failed:   "bg-red-500/10 text-red-400 border border-red-500/30",
   };
   return (
     <span
-      className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${map[status] ?? map.pending}`}
+      className={`text-[10px] uppercase tracking-widest font-bold px-2.5 py-1 rounded-full ${map[status] ?? map.pending}`}
     >
       {status}
     </span>
@@ -307,17 +337,18 @@ function SeverityCount({
   count: number;
 }) {
   const map: Record<string, string> = {
-    critical: "bg-red-600/15 text-red-600 border border-red-600/30",
-    high:     "bg-orange-500/15 text-orange-500 border border-orange-500/30",
-    medium:   "bg-yellow-500/15 text-yellow-600 border border-yellow-500/30",
-    low:      "bg-blue-500/15 text-blue-500 border border-blue-500/30",
-    info:     "bg-muted text-muted-foreground border border-border",
+    critical: "bg-red-500/10 text-red-500 border border-red-500/30",
+    high:     "bg-orange-500/10 text-orange-400 border border-orange-500/30",
+    medium:   "bg-yellow-500/10 text-yellow-500 border border-yellow-500/30",
+    low:      "bg-blue-500/10 text-blue-400 border border-blue-500/30",
+    info:     "bg-white/5 text-white/50 border border-white/10",
   };
   return (
     <span
-      className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase ${map[severity] ?? ""}`}
+      className={`text-[11px] font-semibold px-2 py-0.5 rounded uppercase flex items-center gap-1.5 ${map[severity] ?? ""}`}
     >
-      {count} {severity}
+      <span className="text-[13px]">{count}</span>
+      <span className="opacity-80 tracking-wide">{severity}</span>
     </span>
   );
 }
