@@ -15,9 +15,12 @@ export interface ScanState {
   scan_id: string;
   target: string;
   target_type: string;
+  languages: string[];
   status: ScanStatus;
   current_agent: string;
+  agents_plan: string[];
   findings: Finding[];
   log: string[];
+  llm_log: string[];
   report: string;
 }

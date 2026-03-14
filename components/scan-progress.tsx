@@ -1,41 +1,58 @@
 import { ScanState } from "@/types/scan";
 
-const AGENTS = [
-  { key: "recon",           label: "Recon",              icon: "🌐", tools: "httpx · nmap · whatweb" },
-  { key: "sql_injection",   label: "SQL Injection",       icon: "💉", tools: "sqlmap" },
-  { key: "xss",             label: "XSS",                 icon: "🎯", tools: "dalfox" },
-  { key: "static_analysis", label: "Static Analysis",     icon: "🔬", tools: "semgrep · bandit" },
-  { key: "dependencies",    label: "Dependencies",        icon: "📦", tools: "pip-audit · npm audit" },
-  { key: "secrets",         label: "Secrets",             icon: "🔐", tools: "trufflehog · detect-secrets" },
-  { key: "report",          label: "Report",              icon: "📄", tools: "LLM synthesis" },
-];
+// All possible agent nodes with display metadata.
+const AGENT_META: Record<string, { label: string; icon: string; tools: string }> = {
+  planner:          { label: "Planner",          icon: "🧠", tools: "language detection" },
+  recon:            { label: "Recon",             icon: "🌐", tools: "httpx · nmap · whatweb" },
+  sql_injection:    { label: "SQL Injection",     icon: "💉", tools: "sqlmap" },
+  xss:              { label: "XSS",               icon: "🎯", tools: "dalfox" },
+  static_c:         { label: "C/C++ Analysis",    icon: "🔬", tools: "cppcheck · semgrep p/c" },
+  static_analysis:  { label: "Static Analysis",   icon: "🔬", tools: "semgrep · bandit" },
+  deps_py:          { label: "Python Deps",       icon: "📦", tools: "pip-audit" },
+  deps_js:          { label: "JS Deps",           icon: "📦", tools: "npm audit" },
+  dependencies:     { label: "Dependencies",      icon: "📦", tools: "pip-audit · npm audit" },
+  secrets:          { label: "Secrets",           icon: "🔐", tools: "trufflehog · detect-secrets" },
+  report:           { label: "Report",            icon: "📄", tools: "LLM synthesis" },
+};
 
 interface Props {
   scan: ScanState;
 }
 
-function agentStatus(agentKey: string, scan: ScanState): "done" | "running" | "queued" | "skipped" {
-  const order = AGENTS.map(a => a.key);
-  const currentIdx = order.indexOf(scan.current_agent === "complete" ? "report" : scan.current_agent);
-  const agentIdx = order.indexOf(agentKey);
+function agentStatus(
+  agentKey: string,
+  scan: ScanState,
+): "done" | "running" | "queued" | "skipped" {
+  // Normalise "complete" marker used by backend when fully done.
+  const current =
+    scan.current_agent === "complete" ? "report" : scan.current_agent;
 
   if (scan.status === "complete") return "done";
-  if (scan.current_agent === agentKey) return "running";
-  if (agentIdx < currentIdx) return "done";
+  if (current === agentKey) return "running";
+
+  // Determine ordering from the live plan, falling back to render order.
+  const planOrder = scan.agents_plan.length > 0 ? scan.agents_plan : [];
+  const currentIdx = planOrder.indexOf(current);
+  const agentIdx   = planOrder.indexOf(agentKey);
+
+  if (agentIdx !== -1 && currentIdx !== -1 && agentIdx < currentIdx) return "done";
   return "queued";
 }
 
 export function ScanProgress({ scan }: Props) {
-  // Only show URL agents if URL target, only show static if repo
-  const visibleAgents = AGENTS.filter(a => {
-    if (scan.target_type === "url" && a.key === "static_analysis") return false;
-    if (scan.target_type === "repo" && (a.key === "sql_injection" || a.key === "xss")) return false;
-    return true;
-  });
+  // Build the ordered list from agents_plan when available, otherwise fall back to all agents.
+  const planKeys =
+    scan.agents_plan.length > 0
+      ? ["planner", ...scan.agents_plan]
+      : Object.keys(AGENT_META);
+
+  const visibleAgents = planKeys
+    .filter((key) => AGENT_META[key])
+    .map((key) => ({ key, ...AGENT_META[key] }));
 
   return (
     <div className="flex flex-col gap-1 w-full">
-      {visibleAgents.map(agent => {
+      {visibleAgents.map((agent) => {
         const status = agentStatus(agent.key, scan);
         return (
           <div
@@ -57,7 +74,11 @@ export function ScanProgress({ scan }: Props) {
   );
 }
 
-function StatusBadge({ status }: { status: "done" | "running" | "queued" | "skipped" }) {
+function StatusBadge({
+  status,
+}: {
+  status: "done" | "running" | "queued" | "skipped";
+}) {
   switch (status) {
     case "done":
       return <span className="text-sm text-green-600 font-medium">✓ Done</span>;
