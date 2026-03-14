@@ -21,7 +21,13 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
 
 from ..core.data_models import Finding, ScanStatus, Severity
-from ..core.prompts import INTERPRET_SYSTEM, REPORT_PROMPT, REPORT_SYSTEM
+from ..core.prompts import (
+    GRAPH_BUILDER_PROMPT,
+    GRAPH_BUILDER_SYSTEM,
+    INTERPRET_SYSTEM,
+    REPORT_PROMPT,
+    REPORT_SYSTEM,
+)
 from ..tools.dependencies import run_npm_audit, run_pip_audit
 from ..tools.injection import run_dalfox, run_sqlmap
 from ..tools.recon import run_httpx, run_nmap, run_whatweb
@@ -44,6 +50,7 @@ class GraphState(BaseModel):
     architecture_summary: str = ""
     threat_model:         str = ""
     agents_plan:          list[str] = []
+    app_graph:            dict = {}
     findings:             list[dict] = []
     report:               str = ""
 
@@ -113,6 +120,7 @@ def _parse_findings(agent: str, tool: str, llm_response: str) -> list[dict]:
                 "description": item.get("description", ""),
                 "evidence":    item.get("evidence", "")[:300],
                 "remediation": item.get("remediation", ""),
+                "component":   item.get("component", ""),
             }
             for item in items
             if isinstance(item, dict)
@@ -153,6 +161,7 @@ def _update_store(
                 description=f.get("description", ""),
                 evidence=f.get("evidence", ""),
                 remediation=f.get("remediation", ""),
+                component=f.get("component", ""),
             ))
         except Exception:  # pylint: disable=broad-except
             pass
@@ -228,6 +237,67 @@ def planner_node(state: GraphState) -> dict:
         "threat_model":         scan_plan.threat_model,
         "agents_plan":          scan_plan.agents,
     }
+
+
+def graph_builder_node(state: GraphState) -> dict:
+    """Ask the LLM to build a component architecture graph for the target.
+
+    Runs after recon so the graph incorporates discovered tech stack data.
+    Streams reasoning to the UI via ScanStreamCallback.
+    """
+    _update_store(
+        state.scan_id, "graph_builder",
+        "Building component architecture map...",
+        [],
+    )
+
+    recon_findings = [f for f in state.findings if f.get("agent") == "recon"]
+
+    prompt = GRAPH_BUILDER_PROMPT.format(
+        target=state.target,
+        architecture_summary=state.architecture_summary or "Unknown",
+        threat_model=state.threat_model or "Unknown",
+        recon_findings=_truncate(recon_findings, max_chars=2000)
+                       if recon_findings else "No recon data yet.",
+    )
+
+    callback = ScanStreamCallback(scan_id=state.scan_id, agent="graph_builder")
+    llm = get_llm().with_config({"callbacks": [callback]})
+    response = llm.invoke([HumanMessage(content=GRAPH_BUILDER_SYSTEM + "\n\n" + prompt)])
+
+    text = response.content.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+
+    try:
+        parsed = json.loads(text)
+        app_graph = {
+            "nodes": parsed.get("nodes", []),
+            "edges": parsed.get("edges", []),
+        }
+    except (json.JSONDecodeError, ValueError):
+        app_graph = {"nodes": [], "edges": []}
+
+    node_count = len(app_graph.get("nodes", []))
+    _update_store(
+        state.scan_id, "graph_builder",
+        f"Architecture map built — {node_count} components identified",
+        [],
+    )
+
+    if state.scan_id:
+        from ..db.scans import scans  # avoid circular at module level
+        if state.scan_id in scans:
+            from ..core.data_models import AppGraph, GraphEdge, GraphNode
+            try:
+                scans[state.scan_id].app_graph = AppGraph(
+                    nodes=[GraphNode(**n) for n in app_graph.get("nodes", [])],
+                    edges=[GraphEdge(**e) for e in app_graph.get("edges", [])],
+                )
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+    return {"app_graph": app_graph}
 
 
 def recon_node(state: GraphState) -> dict:
@@ -545,7 +615,7 @@ def report_node(state: GraphState) -> dict:
 
 # All node keys registered in the graph.
 _ALL_NODES = {
-    "recon", "sqli", "xss", "static_c", "static",
+    "recon", "graph_builder", "sqli", "xss", "static_c", "static",
     "deps_py", "deps_js", "deps", "secrets", "report",
 }
 
@@ -607,8 +677,9 @@ def _build_graph() -> object:
     """
     g = StateGraph(GraphState)
 
-    g.add_node("planner",   planner_node)
-    g.add_node("recon",     recon_node)
+    g.add_node("planner",       planner_node)
+    g.add_node("recon",         recon_node)
+    g.add_node("graph_builder", graph_builder_node)
     g.add_node("sqli",      sqli_node)
     g.add_node("xss",       xss_node)
     g.add_node("static_c",  static_c_node)

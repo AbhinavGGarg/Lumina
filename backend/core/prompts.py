@@ -12,15 +12,53 @@ Each finding must match this schema:
     "title": "short title",
     "description": "what the vulnerability is",
     "evidence": "relevant snippet from tool output (max 200 chars)",
-    "remediation": "how to fix it"
+    "remediation": "how to fix it",
+    "component": "which app component this affects (e.g. Login API, Database, Frontend, Session, Auth)"
   }
 ]
 
 CRITICAL RULES FOR IGNORING FALSE POSITIVES:
 1. "No vulnerability found", "Tool output clean", "0 vulnerabilities", or "No sensitive data found" are NOT security findings. Do NOT create findings just to report that a tool ran successfully.
-2. If a tool prints a log level like `[CRITICAL]` or `[ERROR]` but the actual message is "no forms found", "could not connect", or "skipping", this is NOT a vulnerability. 
+2. If a tool prints a log level like `[CRITICAL]` or `[ERROR]` but the actual message is "no forms found", "could not connect", or "skipping", this is NOT a vulnerability.
 3. If there are no real, actionable security flaws indicating a weakness in the target, you MUST return an empty array: []
 """
+
+GRAPH_BUILDER_SYSTEM = """You are a security architect mapping the component architecture of a target web application.
+
+Based on the reconnaissance data provided, identify the key components of the application and how they communicate. This map will be used to visualise which components are being tested and where vulnerabilities are found.
+
+Return ONLY a JSON object with this exact structure -- no markdown, no explanation:
+{
+  "nodes": [
+    {"id": "frontend",  "label": "React SPA",     "type": "frontend"},
+    {"id": "api",       "label": "REST API",       "type": "api"},
+    {"id": "auth",      "label": "JWT Auth",       "type": "auth"},
+    {"id": "db",        "label": "PostgreSQL",     "type": "database"}
+  ],
+  "edges": [
+    {"from_id": "frontend", "to_id": "api",  "label": "HTTPS"},
+    {"from_id": "api",      "to_id": "auth", "label": "JWT"},
+    {"from_id": "api",      "to_id": "db",   "label": "SQL"}
+  ]
+}
+
+Node type must be one of: frontend, api, backend, auth, database, cache, external, service
+Rules:
+- Create 4–8 nodes. Keep labels short (2–4 words).
+- Base nodes on what recon revealed; infer reasonable components for unobserved parts.
+- id must be a short slug (no spaces). label is the human-readable name.
+- Edges represent direct communication/data flow between components.
+"""
+
+GRAPH_BUILDER_PROMPT = """Target: {target}
+
+Architecture summary: {architecture_summary}
+Threat model: {threat_model}
+
+Reconnaissance findings:
+{recon_findings}
+
+Build the component architecture map for this target."""
 
 PLANNER_SYSTEM = """You are a senior security architect. Review this repository snapshot. Understand the tech stack and its threat vectors.
 
@@ -66,8 +104,8 @@ Format:
 ## Findings
 (If the findings array is empty, state: "No vulnerabilities were detected during automated scans." and DO NOT include the table.)
 
-| # | Severity | Title | Tool |
-|---|---|---|---|
+| # | Severity | Title | Tool | Component |
+|---|---|---|---|---|
 (Table of findings, or omit if none)
 
 ## Detailed Findings
@@ -76,6 +114,7 @@ Format:
 ### [N]. Title
 **Severity:** critical/high/medium/low/info
 **Tool:** tool name
+**Component:** affected component
 
 **Description:** ...
 

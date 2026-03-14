@@ -9,6 +9,24 @@ export interface Finding {
   description: string;
   evidence: string;
   remediation: string;
+  component: string;
+}
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: string; // frontend | api | backend | auth | database | cache | external | service
+}
+
+export interface GraphEdge {
+  from_id: string;
+  to_id: string;
+  label: string;
+}
+
+export interface AppGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
 }
 
 export interface ScanState {
@@ -20,6 +38,7 @@ export interface ScanState {
   status: ScanStatus;
   current_agent: string;
   agents_plan: string[];
+  app_graph: AppGraph;
   findings: Finding[];
   log: string[];
   llm_log: string[];

@@ -28,6 +28,24 @@ class Finding(BaseModel):
     description: str
     evidence:    str = ""
     remediation: str = ""
+    component:   str = ""   # which app component this vuln primarily affects
+
+
+class GraphNode(BaseModel):
+    id:    str
+    label: str
+    type:  str = "service"  # frontend | api | auth | database | cache | external | service
+
+
+class GraphEdge(BaseModel):
+    from_id: str
+    to_id:   str
+    label:   str = ""
+
+
+class AppGraph(BaseModel):
+    nodes: list[GraphNode] = []
+    edges: list[GraphEdge] = []
 
 
 class ScanState(BaseModel):
@@ -39,6 +57,7 @@ class ScanState(BaseModel):
     status:               ScanStatus = ScanStatus.pending
     current_agent:        str = ""
     agents_plan:          list[str] = []
+    app_graph:            AppGraph = AppGraph()
     findings:             list[Finding] = []
     log:                  list[str] = []
     # Raw LLM token stream -- each entry is one token or a control sentinel.
