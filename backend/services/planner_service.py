@@ -1,87 +1,97 @@
 """Planner module for Pulse.
 
-Inspects a target (URL or filesystem path) and determines which scan
-agents are applicable, avoiding the naive approach of running every
-tool regardless of the codebase's language or type.
+Inspects a target (URL or filesystem path), generates an architecture snapshot,
+and uses an LLM to dynamically select the correct security agents.
 """
 
+import json
+import logging
 import os
+from collections import defaultdict
 from pathlib import Path
 
+from langchain_core.messages import HumanMessage
 
-# ── Language detection helpers ────────────────────────────────────────────────
+from .llm_service import get_llm
+from ..core.prompts import PLANNER_SYSTEM
 
-_LANG_MARKERS: dict[str, list[str]] = {
-    "python":     ["requirements.txt", "pyproject.toml", "setup.py", "Pipfile"],
-    "javascript": ["package.json"],
-    "go":         ["go.mod"],
-    "rust":       ["Cargo.toml"],
-    "java":       ["pom.xml", "build.gradle"],
-    "ruby":       ["Gemfile"],
-    "php":        ["composer.json"],
-}
-
-_LANG_EXTENSIONS: dict[str, list[str]] = {
-    "python":     [".py"],
-    "javascript": [".js", ".ts", ".jsx", ".tsx", ".mjs"],
-    "go":         [".go"],
-    "rust":       [".rs"],
-    "java":       [".java"],
-    "c":          [".c", ".h"],
-    "cpp":        [".cpp", ".cc", ".cxx", ".hpp"],
-    "ruby":       [".rb"],
-    "php":        [".php"],
-}
-
-# Maximum number of files to walk when fingerprinting extensions.
+# Maximum number of files to walk when fingerprinting.
 _MAX_FILES_WALKED = 1000
 
+# ── Private helpers ───────────────────────────────────────────────────────────
 
-def _detect_languages(repo_path: str) -> list[str]:
-    """Detect programming languages present in a repository.
-
-    Uses marker files first (fast, no filesystem walk), then falls
-    back to extension sampling for up to _MAX_FILES_WALKED files.
-
-    Args:
-        repo_path: Absolute path to the repository root.
-
-    Returns:
-        Sorted list of detected language names (lower-case).
+def _generate_fingerprint(repo_path: str) -> str:
+    """Walk the repository and build a compact architecture fingerprint.
+    
+    Lists root files explicitly and aggregates file extensions per directory.
     """
-    found: set[str] = set()
-    root = Path(repo_path)
-
-    # Marker-file pass -- O(1) per language.
-    for lang, markers in _LANG_MARKERS.items():
-        if any((root / m).exists() for m in markers):
-            found.add(lang)
-
-    # Extension sampling pass.
-    ext_to_lang: dict[str, str] = {}
-    for lang, exts in _LANG_EXTENSIONS.items():
-        for ext in exts:
-            ext_to_lang[ext] = lang
-
+    root_files = []
+    dir_summaries: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    
     files_checked = 0
     for dirpath, dirnames, filenames in os.walk(repo_path):
         # Skip hidden dirs and common noise dirs.
         dirnames[:] = [
             d for d in dirnames
             if not d.startswith(".")
-            and d not in {"node_modules", "__pycache__", "vendor", "target", ".git"}
+            and d not in {"node_modules", "__pycache__", "vendor", "target", "build"}
         ]
+        
+        rel_dir = os.path.relpath(dirpath, repo_path)
+        is_root = (rel_dir == ".")
+        
         for fname in filenames:
-            ext = Path(fname).suffix.lower()
-            if ext in ext_to_lang:
-                found.add(ext_to_lang[ext])
+            ext = Path(fname).suffix.lower() or fname.lower()
+            
+            if is_root:
+                root_files.append(fname)
+            
+            dir_summaries[rel_dir][ext] += 1
+            
             files_checked += 1
             if files_checked >= _MAX_FILES_WALKED:
                 break
         if files_checked >= _MAX_FILES_WALKED:
             break
 
-    return sorted(found)
+    # Format the fingerprint output
+    lines = ["Root Files:"]
+    for f in sorted(root_files):
+        lines.append(f"  - {f}")
+        
+    lines.append("\nDirectory Summary:")
+    for directory, exts in sorted(dir_summaries.items()):
+        total = sum(exts.values())
+        ext_str = ", ".join(f"{ext}: {count}" for ext, count in sorted(exts.items()))
+        dir_name = "/" if directory == "." else f"/{directory}"
+        lines.append(f"  {dir_name}: {total} files ({ext_str})")
+        
+    return "\n".join(lines)
+
+
+def _call_llm_planner(fingerprint: str) -> dict:
+    """Pass the fingerprint to the LLM and receive a strict JSON plan."""
+    llm = get_llm()
+    prompt = f"{PLANNER_SYSTEM}\n\nRepository Snapshot:\n{fingerprint}"
+    
+    try:
+        response = llm.invoke([HumanMessage(content=prompt)])
+        text = response.content.strip()
+        text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = json.loads(text)
+        
+        return {
+            "architecture_summary": data.get("architecture_summary", "Unknown architecture"),
+            "threat_model": data.get("threat_model", "Unknown threats"),
+            "agents": data.get("agents_plan", ["secrets", "report"]),
+        }
+    except Exception as e:
+        logging.error("Failed to parse LLM planner output: %s", e)
+        return {
+            "architecture_summary": "Fallback (LLM Parsing Failed)",
+            "threat_model": "Unknown",
+            "agents": ["secrets", "report"],
+        }
 
 
 # ── Public planner API ────────────────────────────────────────────────────────
@@ -91,39 +101,45 @@ class ScanPlan:
 
     Attributes:
         target_type: "url" or "repo"
-        languages: Detected languages (empty for URL targets)
+        architecture_summary: LLM-generated tech stack description
+        threat_model: LLM-generated threat assessment
         agents: Ordered list of agent node keys to execute
     """
 
     def __init__(
         self,
         target_type: str,
-        languages: list[str],
+        architecture_summary: str,
+        threat_model: str,
         agents: list[str],
     ) -> None:
         self.target_type = target_type
-        self.languages = languages
+        self.architecture_summary = architecture_summary
+        self.threat_model = threat_model
+        
+        # Ensure report is always the last agent
+        if "report" not in agents:
+            agents.append("report")
         self.agents = agents
 
     def __repr__(self) -> str:
         return (
             f"ScanPlan(target_type={self.target_type!r}, "
-            f"languages={self.languages}, agents={self.agents})"
+            f"arch={self.architecture_summary!r}, agents={self.agents})"
         )
 
 
 def plan(target: str) -> ScanPlan:
     """Produce a tailored scan plan for the given target.
 
-    For filesystem paths, inspects the repository to detect languages
-    and returns only the agents appropriate for the detected stack.
-    For URLs the full network-oriented pipeline is returned.
+    For filesystem paths, generates a structural fingerprint and uses an LLM
+    to architect a plan. For URLs, the full network-oriented pipeline is returned.
 
     Args:
         target: URL (http/https) or absolute filesystem path.
 
     Returns:
-        ScanPlan describing target type, languages, and agent order.
+        ScanPlan describing target type, architecture, and agent order.
     """
     is_path = target.startswith("/") or target.startswith(".")
 
@@ -131,41 +147,20 @@ def plan(target: str) -> ScanPlan:
         # URL target -- full network scan pipeline.
         return ScanPlan(
             target_type="url",
-            languages=[],
+            architecture_summary="Live Web Application",
+            threat_model="Network layer threats, XSS, and SQLi.",
             agents=["recon", "sqli", "xss", "deps", "secrets", "report"],
         )
 
-    # Filesystem target -- inspect and build a tailored plan.
-    languages = _detect_languages(target)
-    agents: list[str] = []
-
-    has_c_cpp   = bool({"c", "cpp"} & set(languages))
-    has_python  = "python" in languages
-    has_js      = "javascript" in languages
-    has_go      = "go" in languages
-    has_rust    = "rust" in languages
-    has_java    = "java" in languages
-
-    if has_c_cpp:
-        agents.append("static_c")
-
-    # semgrep + bandit cover Python; semgrep also covers JS/Go/Java.
-    if has_python or has_js or has_go or has_java or has_rust:
-        agents.append("static")
-
-    # Dependency audits -- only when the relevant manifest exists.
-    if has_python:
-        agents.append("deps_py")
-
-    if has_js:
-        agents.append("deps_js")
-
-    # Secrets scanning applies to any repo.
-    agents.append("secrets")
-    agents.append("report")
-
-    # Fallback: at minimum run secrets + report even for unknown stacks.
-    if not agents:
-        agents = ["secrets", "report"]
-
-    return ScanPlan(target_type="repo", languages=languages, agents=agents)
+    # Filesystem target -- dynamically architect a plan.
+    fingerprint = _generate_fingerprint(target)
+    logging.info("Generated repo fingerprint:\n%s", fingerprint)
+    
+    plan_data = _call_llm_planner(fingerprint)
+    
+    return ScanPlan(
+        target_type="repo",
+        architecture_summary=plan_data["architecture_summary"],
+        threat_model=plan_data["threat_model"],
+        agents=plan_data["agents"],
+    )

@@ -172,7 +172,9 @@ export default function ScanPage() {
   if (error) {
     return (
       <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
-        <p className="text-red-400 bg-red-400/10 px-4 py-2 rounded-xl border border-red-400/20">{error}</p>
+        <p className="text-red-400 bg-red-400/10 px-4 py-2 rounded-xl border border-red-400/20">
+          {error}
+        </p>
       </main>
     );
   }
@@ -182,7 +184,9 @@ export default function ScanPage() {
       <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-white/50 text-sm tracking-wide">Connecting to agent stream...</p>
+          <p className="text-white/50 text-sm tracking-wide">
+            Connecting to agent stream...
+          </p>
         </div>
       </main>
     );
@@ -206,12 +210,11 @@ export default function ScanPage() {
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white flex flex-col px-6 md:px-12 xl:px-24 pt-8 pb-16 font-sans">
       <div className="w-full max-w-350 mx-auto flex flex-col gap-8">
-        
         {/* Header Console */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 rounded-2xl border border-white/10 bg-[#111] shadow-2xl relative overflow-hidden">
           {/* Subtle bg glow */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/5 blur-[100px] pointer-events-none rounded-full" />
-          
+
           <div className="flex flex-col items-start gap-2 z-10">
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-serif font-medium tracking-tight">
@@ -219,27 +222,28 @@ export default function ScanPage() {
               </h1>
               <StatusBadge status={scan.status} />
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-3 mt-1">
               <span className="font-mono text-sm text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">
                 {scan.target}
               </span>
-              {scan.languages.length > 0 && (
-                <div className="flex items-center gap-1.5 text-xs text-white/40">
-                  <span>Languages:</span>
-                  {scan.languages.map((l) => (
-                    <span key={l} className="font-mono text-white/70 bg-white/5 px-1.5 py-px rounded border border-white/10">
-                      {l}
-                    </span>
-                  ))}
+              {scan.architecture_summary && (
+                <div className="flex items-center gap-1.5 text-xs text-white/40 max-w-xl truncate">
+                  <span>Architecture:</span>
+                  <span
+                    className="font-mono text-white/70 bg-white/5 px-1.5 py-px rounded border border-white/10 truncate"
+                    title={scan.architecture_summary}
+                  >
+                    {scan.architecture_summary}
+                  </span>
                 </div>
               )}
             </div>
           </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto z-10">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => router.push("/")}
               className="bg-[#1a1a1a] hover:bg-[#2a2a2a] border-white/10 text-white w-full md:w-auto"
             >
@@ -258,7 +262,6 @@ export default function ScanPage() {
 
         {/* 3-Column SaaS Dashboard Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
           {/* Column 1: Pipeline & Status (Col Span 3) */}
           <div className="flex flex-col gap-6 lg:col-span-3">
             {/* Severity Summary */}
@@ -325,9 +328,11 @@ export default function ScanPage() {
           <div className="flex flex-col gap-4 lg:col-span-4 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg h-150 lg:h-auto lg:self-stretch overflow-y-auto">
             <h2 className="text-xs font-semibold text-white/50 uppercase tracking-widest flex items-center justify-between sticky top-0 bg-[#111] z-10 pb-2 mb-2 border-b border-white/5 w-full">
               <span>Discovered Vulnerabilities</span>
-              <span className="bg-white/10 text-white/80 px-2 py-0.5 rounded-full">{scan.findings.length}</span>
+              <span className="bg-white/10 text-white/80 px-2 py-0.5 rounded-full">
+                {scan.findings.length}
+              </span>
             </h2>
-            
+
             <div className="flex flex-col gap-3">
               {sortedFindings.length === 0 ? (
                 <p className="text-sm text-white/30 text-center py-12">
@@ -342,7 +347,6 @@ export default function ScanPage() {
               )}
             </div>
           </div>
-
         </div>
       </div>
 
@@ -362,10 +366,10 @@ export default function ScanPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    pending:  "bg-white/10 text-white/60 border border-white/20",
-    running:  "bg-purple-500/10 text-purple-400 border border-purple-500/30",
+    pending: "bg-white/10 text-white/60 border border-white/20",
+    running: "bg-purple-500/10 text-purple-400 border border-purple-500/30",
     complete: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
-    failed:   "bg-red-500/10 text-red-400 border border-red-500/30",
+    failed: "bg-red-500/10 text-red-400 border border-red-500/30",
   };
   return (
     <span
@@ -385,10 +389,10 @@ function SeverityCount({
 }) {
   const map: Record<string, string> = {
     critical: "bg-red-500/10 text-red-500 border border-red-500/30",
-    high:     "bg-orange-500/10 text-orange-400 border border-orange-500/30",
-    medium:   "bg-yellow-500/10 text-yellow-500 border border-yellow-500/30",
-    low:      "bg-blue-500/10 text-blue-400 border border-blue-500/30",
-    info:     "bg-white/5 text-white/50 border border-white/10",
+    high: "bg-orange-500/10 text-orange-400 border border-orange-500/30",
+    medium: "bg-yellow-500/10 text-yellow-500 border border-yellow-500/30",
+    low: "bg-blue-500/10 text-blue-400 border border-blue-500/30",
+    info: "bg-white/5 text-white/50 border border-white/10",
   };
   return (
     <span

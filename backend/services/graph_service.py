@@ -38,13 +38,14 @@ from .planner_service import plan
 class GraphState(BaseModel):
     """Mutable state threaded through every LangGraph node."""
 
-    scan_id:     str = ""
-    target:      str = ""
-    target_type: str = ""
-    languages:   list[str] = []
-    agents_plan: list[str] = []
-    findings:    list[dict] = []
-    report:      str = ""
+    scan_id:              str = ""
+    target:               str = ""
+    target_type:          str = ""
+    architecture_summary: str = ""
+    threat_model:         str = ""
+    agents_plan:          list[str] = []
+    findings:             list[dict] = []
+    report:               str = ""
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -162,6 +163,7 @@ def _llm_interpret(
     agent: str,
     tool_label: str,
     combined: dict | str,
+    threat_model: str = "",
 ) -> list[dict]:
     """Call the LLM to interpret tool output and return parsed findings.
 
@@ -170,14 +172,18 @@ def _llm_interpret(
         agent: Agent name for labelling findings.
         tool_label: Human-readable tool name (eg: "cppcheck+semgrep/c").
         combined: Tool output to interpret.
+        threat_model: Optional context about the repo's risks.
 
     Returns:
         List of finding dicts.
     """
     callback = ScanStreamCallback(scan_id=scan_id, agent=agent)
     llm = get_llm().with_config({"callbacks": [callback]})
+    
+    context = f"\n\nThreat Model Context: {threat_model}" if threat_model else ""
     prompt = (
         INTERPRET_SYSTEM
+        + context
         + f"\n\nAgent: {agent}\nTools: {tool_label}\nOutput:\n"
         + _truncate(combined)
     )
@@ -190,9 +196,10 @@ def _llm_interpret(
 def planner_node(state: GraphState) -> dict:
     """Inspect the target and produce a tailored scan plan.
 
-    No LLM call -- pure filesystem and URL heuristics.
+    For repo targets, an LLM determines the architecture, threat model,
+    and agent routing plan.
     """
-    _update_store(state.scan_id, "planner", "Analysing target...", [])
+    _update_store(state.scan_id, "planner", "Analysing target architecture...", [])
 
     scan_plan = plan(state.target)
 
@@ -206,19 +213,20 @@ def planner_node(state: GraphState) -> dict:
         from ..db.scans import scans
         if state.scan_id in scans:
             store = scans[state.scan_id]
-            store.target_type = scan_plan.target_type
-            store.languages   = scan_plan.languages
-            store.agents_plan = scan_plan.agents
+            store.target_type          = scan_plan.target_type
+            store.architecture_summary = scan_plan.architecture_summary
+            store.threat_model         = scan_plan.threat_model
+            store.agents_plan          = scan_plan.agents
             store.log.append(
                 f"Plan: target_type={scan_plan.target_type}, "
-                f"languages={scan_plan.languages}, "
                 f"agents={scan_plan.agents}"
             )
 
     return {
-        "target_type": scan_plan.target_type,
-        "languages":   scan_plan.languages,
-        "agents_plan": scan_plan.agents,
+        "target_type":          scan_plan.target_type,
+        "architecture_summary": scan_plan.architecture_summary,
+        "threat_model":         scan_plan.threat_model,
+        "agents_plan":          scan_plan.agents,
     }
 
 
@@ -249,7 +257,7 @@ def recon_node(state: GraphState) -> dict:
         )
         return {"findings": state.findings}
 
-    findings = _llm_interpret(state.scan_id, "recon", "httpx+nmap+whatweb", combined)
+    findings = _llm_interpret(state.scan_id, "recon", "httpx+nmap+whatweb", combined, state.threat_model)
     _update_store(
         state.scan_id, "recon",
         f"Recon complete -- findings={len(findings)}",
@@ -271,7 +279,7 @@ def sqli_node(state: GraphState) -> dict:
             )
         return {"findings": state.findings}
 
-    findings = _llm_interpret(state.scan_id, "sql_injection", "sqlmap", result)
+    findings = _llm_interpret(state.scan_id, "sql_injection", "sqlmap", result, state.threat_model)
     _update_store(
         state.scan_id, "sql_injection",
         f"SQLi scan complete -- findings={len(findings)}",
@@ -293,7 +301,7 @@ def xss_node(state: GraphState) -> dict:
         )
         return {"findings": state.findings}
 
-    findings = _llm_interpret(state.scan_id, "xss", "dalfox", result)
+    findings = _llm_interpret(state.scan_id, "xss", "dalfox", result, state.threat_model)
     _update_store(
         state.scan_id, "xss",
         f"XSS scan complete -- findings={len(findings)}",
@@ -331,7 +339,7 @@ def static_c_node(state: GraphState) -> dict:
         return {"findings": state.findings}
 
     findings = _llm_interpret(
-        state.scan_id, "static_c", "cppcheck+semgrep/c", combined,
+        state.scan_id, "static_c", "cppcheck+semgrep/c", combined, state.threat_model
     )
     _update_store(
         state.scan_id, "static_c",
@@ -370,7 +378,7 @@ def static_node(state: GraphState) -> dict:
         return {"findings": state.findings}
 
     findings = _llm_interpret(
-        state.scan_id, "static_analysis", "semgrep+bandit", combined,
+        state.scan_id, "static_analysis", "semgrep+bandit", combined, state.threat_model
     )
     _update_store(
         state.scan_id, "static_analysis",
@@ -397,7 +405,7 @@ def deps_py_node(state: GraphState) -> dict:
         )
         return {"findings": state.findings}
 
-    findings = _llm_interpret(state.scan_id, "deps_py", "pip-audit", result)
+    findings = _llm_interpret(state.scan_id, "deps_py", "pip-audit", result, state.threat_model)
     _update_store(
         state.scan_id, "deps_py",
         f"Python dependency scan complete -- findings={len(findings)}",
@@ -423,7 +431,7 @@ def deps_js_node(state: GraphState) -> dict:
         )
         return {"findings": state.findings}
 
-    findings = _llm_interpret(state.scan_id, "deps_js", "npm-audit", result)
+    findings = _llm_interpret(state.scan_id, "deps_js", "npm-audit", result, state.threat_model)
     _update_store(
         state.scan_id, "deps_js",
         f"JS dependency scan complete -- findings={len(findings)}",
@@ -455,7 +463,7 @@ def deps_node(state: GraphState) -> dict:
         return {"findings": state.findings}
 
     findings = _llm_interpret(
-        state.scan_id, "dependencies", "pip-audit+npm-audit", combined,
+        state.scan_id, "dependencies", "pip-audit+npm-audit", combined, state.threat_model
     )
     _update_store(
         state.scan_id, "dependencies",
@@ -492,7 +500,7 @@ def secrets_node(state: GraphState) -> dict:
         return {"findings": state.findings}
 
     findings = _llm_interpret(
-        state.scan_id, "secrets", "trufflehog+detect-secrets", combined,
+        state.scan_id, "secrets", "trufflehog+detect-secrets", combined, state.threat_model
     )
     _update_store(
         state.scan_id, "secrets",
@@ -507,10 +515,13 @@ def report_node(state: GraphState) -> dict:
     _update_store(state.scan_id, "report", "Generating vulnerability report...", [])
 
     findings_text = _truncate(state.findings, max_chars=6000)
-    languages_str = ", ".join(state.languages) if state.languages else "N/A"
+    architecture = state.architecture_summary or "N/A"
+    threats = state.threat_model or "N/A"
+    
     prompt = REPORT_PROMPT.format(
         target=state.target,
-        languages=languages_str,
+        architecture=architecture,
+        threat_model=threats,
         findings=findings_text,
     )
 
