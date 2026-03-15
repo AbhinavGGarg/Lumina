@@ -126,3 +126,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .page-shell {
+    @apply w-full px-6 md:px-12 xl:px-24;
+  }
+
+  .page-container {
+    @apply mx-auto w-full max-w-7xl;
+  }
+}

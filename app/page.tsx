@@ -6,16 +6,23 @@ import { Lock, LayoutGrid } from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col font-sans selection:bg-purple-500/30">
-      <main className="flex-1 flex flex-col px-6 md:px-12 xl:px-24 pt-32 pb-16 justify-center">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-8 max-w-7xl mx-auto w-full">
+    <div className="relative min-h-screen overflow-hidden bg-[#07070a] text-white flex flex-col font-sans selection:bg-purple-500/30">
+      {/* Background decorations */}
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_10%,rgba(168,85,247,0.18),transparent_60%),radial-gradient(900px_500px_at_85%_20%,rgba(59,130,246,0.14),transparent_60%),radial-gradient(800px_500px_at_50%_100%,rgba(99,102,241,0.12),transparent_65%)]" />
+        <div className="absolute inset-0 opacity-[0.06] [background-image:linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] [background-size:44px_44px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#07070a]/20 to-[#07070a]/70" />
+      </div>
+
+      <main className="relative z-10 page-shell flex-1 flex flex-col pt-24 pb-16 justify-center">
+        <div className="page-container grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-8">
           {/* Left Hero Section */}
           <div className="flex flex-col gap-6 items-start text-left">
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
-              className="text-5xl md:text-6xl lg:text-7xl font-serif tracking-tight leading-[1.1]"
+              className="text-5xl md:text-6xl lg:text-7xl font-serif tracking-tight leading-[1.1] bg-gradient-to-r from-white via-white to-purple-200/90 bg-clip-text text-transparent"
             >
               Pulse
             </motion.h1>
@@ -23,7 +30,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.1 }}
-              className="text-3xl md:text-4xl font-serif tracking-tight leading-[1.1] text-white/80"
+              className="text-3xl md:text-4xl font-serif tracking-tight leading-[1.1] text-white/85"
             >
               Find Vulnerabilities <br className="hidden md:block" />
               Using Autonomous Agents.
@@ -52,7 +59,7 @@ export default function Home() {
               <div className="bg-[#0a0a0a] rounded-xl">
                 <ScanForm />
               </div>
-              <p className="text-[10px] text-white/30 tracking-tight mt-4 ml-2 flex items-center gap-1.5">
+              <p className="text-[10px] text-white/30 tracking-tight mt-4 flex items-center gap-1.5">
                 <Lock className="w-3 h-3" />
                 Web scans use allowlisted hosts. Public GitHub repos are
                 imported in backend-isolated storage.
@@ -67,7 +74,8 @@ export default function Home() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="hidden lg:flex flex-col justify-center items-end"
           >
-            <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111] overflow-hidden shadow-2xl relative">
+            <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111] overflow-hidden shadow-2xl relative backdrop-blur-sm">
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-transparent" />
               {/* Console Header */}
               <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-[#161616]">
                 <div className="flex gap-1.5">
@@ -145,8 +153,8 @@ export default function Home() {
       </main>
 
       {/* Trusted By Section (Footer) */}
-      <footer className="w-full px-6 md:px-12 xl:px-24 pb-12 mt-auto">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-6 md:gap-12 border-t border-white/5 pt-8">
+      <footer className="relative z-10 page-shell w-full pb-12 mt-auto">
+        <div className="page-container flex flex-col md:flex-row items-center gap-6 md:gap-12 border-t border-white/5 pt-8">
           <span className="text-[10px] text-white/30 uppercase tracking-widest font-mono">
             Orchestrating standard tooling
           </span>

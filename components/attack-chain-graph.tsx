@@ -135,6 +135,8 @@ const LEGEND = [
   { type: "impact", label: "Impact" },
 ];
 
+const LEGEND_ITEM_GAP = 98;
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function AttackChainGraph({ scan }: { scan: ScanState }) {
@@ -313,7 +315,7 @@ export function AttackChainGraph({ scan }: { scan: ScanState }) {
             return (
               <g
                 key={item.type}
-                transform={`translate(${PAD_X + i * 72}, ${svgH - LEGEND_H + 6})`}
+                transform={`translate(${PAD_X + i * LEGEND_ITEM_GAP}, ${svgH - LEGEND_H + 6})`}
               >
                 <circle cx="5" cy="5" r="4" fill={c.dot} opacity="0.85" />
                 <text x="13" y="9" fontSize="7.5" fill="#6b7280">
