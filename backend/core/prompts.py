@@ -1,6 +1,7 @@
 """LLM prompts for the penetration testing system."""
 
 INTERPRET_SYSTEM = """You are a penetration tester analysing security tool output.
+Treat tool output as evidence signals, not guaranteed compromise proof.
 
 Extract security findings from the tool output below.
 Return ONLY a JSON array -- no markdown, no explanation, no backticks.
@@ -10,7 +11,7 @@ Each finding must match this schema:
   {
     "severity": "critical|high|medium|low|info",
     "title": "short title",
-    "description": "what the vulnerability is",
+    "description": "what the potential vulnerability is and why it may matter",
     "evidence": "relevant snippet from tool output (max 200 chars)",
     "remediation": "how to fix it",
     "component": "which app component this affects (e.g. Login API, Database, Frontend, Session, Auth)"
@@ -24,11 +25,14 @@ CRITICAL RULES FOR IGNORING FALSE POSITIVES:
 4. Connectivity and runtime issues are NOT vulnerabilities: "connection refused", "timed out", DNS failures, TLS handshake errors, "unable to connect", "target did not respond", and similar scanner/runtime failures must be ignored as findings.
 5. An open TCP port or identified service/version alone is NOT a vulnerability. Only report it if the tool output contains a concrete exploitable weakness (e.g., explicit CVE, confirmed injection, auth bypass, exposed secret, insecure configuration with clear impact).
 6. Never label scanner/tool operational failures as SQLi/XSS/RCE. If sqlmap/dalfox cannot reach the target or found no injectable/reflected parameters, return [].
+7. Confidence gating: if evidence is weak/ambiguous, return [] rather than guessing.
+8. Wording: when evidence is suggestive but not exploit-confirmed, use cautious phrasing such as "Potential" or "Possible" in title/description. Use definitive wording only when tool output is explicit.
 """
 
 ATTACK_CHAIN_SYSTEM = """You are a senior red team operator and threat intelligence analyst.
 
-Your task: given a list of confirmed security findings, construct an attack chain graph showing how an adversary could chain these vulnerabilities together to escalate from initial access to impact.
+Your task: given a list of security findings, construct a PLAUSIBLE attack chain graph showing how an adversary could potentially chain these weaknesses from initial access to impact.
+Treat this as threat modelling, not proof of exploitation.
 
 === STEP-BY-STEP REASONING (chain-of-thought) ===
 Before producing JSON, reason through these questions silently:
@@ -84,9 +88,10 @@ WRONG example:
 - Include only findings that form part of a meaningful chain. Isolated findings with no chain connections should still be nodes but with no edges.
 - Create 3–7 nodes maximum. Keep labels short (2–5 words).
 - id must be a short slug like "node_1", "node_2". label is human-readable.
-- The narrative field must be 2–4 sentences describing the full attack story in plain English.
+- The narrative field must be 2–4 sentences describing a plausible/theoretical attack story in plain English.
 - The mermaid field must be a valid Mermaid flowchart LR diagram. Use \\n for newlines. Escape special characters in node labels with quotes.
 - Every edge MUST include a justification field explaining the causal link.
+- Use calibrated language: "could", "may", "plausible". Do not claim exploitation definitely happened unless explicitly evidenced.
 """
 
 ATTACK_CHAIN_PROMPT = """Target: {target}
@@ -94,7 +99,7 @@ ATTACK_CHAIN_PROMPT = """Target: {target}
 Architecture summary: {architecture_summary}
 Threat model: {threat_model}
 
-All confirmed findings from automated scans:
+Automated findings from scans (treat as signals that may require manual validation):
 {all_findings}
 
 Construct the attack chain graph from these findings."""
@@ -154,7 +159,8 @@ REPORT_SYSTEM = (
     "You are a senior penetration tester writing a professional vulnerability report. "
     "Write clear, concise Markdown. Be direct. Do not pad with unnecessary text.\n"
     "CRITICAL: Base your report ONLY on the provided findings from automated scans. "
-    "DO NOT invent, guess, or hallucinate findings. DO NOT write about 'manual analysis'."
+    "DO NOT invent, guess, or hallucinate findings. DO NOT write about 'manual analysis'. "
+    "Use confidence-calibrated wording: if exploitation is not explicitly confirmed, frame outcomes as potential/plausible."
 )
 
 REPORT_PROMPT = """Write a penetration testing report for target: {target}

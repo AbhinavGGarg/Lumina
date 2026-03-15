@@ -60,9 +60,15 @@ def run_pip_audit(repo_path: str) -> dict:
             affected = [d for d in vulns if d.get("vulns")]
             return {"vulnerabilities": affected[:30], "total": len(affected), "error": ""}
         except json.JSONDecodeError:
+            err_msg = r.stderr[:500] if r.stderr else "pip-audit failed to return JSON."
+            if "internal pip failure" in err_msg or "No matching distribution found" in err_msg:
+                return {
+                    "vulnerabilities": [], "total": 0,
+                    "error": "Target repo dependencies are incompatible with the scanner's Python environment (resolution failed). Skipping deep pip audit.",
+                }
             return {
                 "vulnerabilities": [], "total": 0,
-                "error": r.stderr[:500] if r.stderr else "",
+                "error": err_msg,
             }
     except FileNotFoundError:
         return {
