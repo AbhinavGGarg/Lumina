@@ -48,14 +48,17 @@ function computeLayout(
     (children[e.from_id] ??= []).push(e.to_id);
   }
 
-  // Assign columns via BFS.
+  // Assign columns via BFS — root nodes explicitly start at col 0.
   const col: Record<string, number> = {};
-  const queue: string[] = nodes.filter((n) => (inDegree[n.id] ?? 0) === 0).map((n) => n.id);
-  if (queue.length === 0 && nodes.length > 0) queue.push(nodes[0].id); // fallback
+  const roots = nodes.filter((n) => (inDegree[n.id] ?? 0) === 0).map((n) => n.id);
+  if (roots.length === 0 && nodes.length > 0) roots.push(nodes[0].id);
+  for (const id of roots) col[id] = 0;
+
+  const queue = [...roots];
   let head = 0;
   while (head < queue.length) {
     const id = queue[head++];
-    const c = col[id] ?? 0;
+    const c = col[id];
     for (const child of children[id] ?? []) {
       if ((col[child] ?? -1) < c + 1) {
         col[child] = c + 1;
@@ -63,9 +66,10 @@ function computeLayout(
       }
     }
   }
-  // Any unvisited nodes fall at the end.
+  // Any unreachable nodes go in their own column at the end.
+  const maxAssigned = Object.values(col).length > 0 ? Math.max(...Object.values(col)) : 0;
   for (const n of nodes) {
-    if (col[n.id] === undefined) col[n.id] = Object.keys(col).length;
+    if (col[n.id] === undefined) col[n.id] = maxAssigned + 1;
   }
 
   // Group by column, assign rows.
@@ -116,22 +120,16 @@ export function AttackChainGraph({ scan }: { scan: ScanState }) {
     );
   }
 
-  const pos        = computeLayout(chain.nodes, chain.edges);
-  const colCount   = new Set(chain.nodes.map((n) => pos[n.id]?.x ?? 0)).size;
-  const maxPerCol  = Math.max(
-    ...Object.values(
-      chain.nodes.reduce<Record<number, number>>((acc, n) => {
-        const x = Math.round(pos[n.id]?.x ?? 0);
-        acc[x] = (acc[x] ?? 0) + 1;
-        return acc;
-      }, {}),
-    ),
-    1,
-  );
+  const pos = computeLayout(chain.nodes, chain.edges);
 
+  // Derive SVG dimensions directly from the computed positions.
+  const allX   = chain.nodes.map((n) => pos[n.id]?.x ?? 0);
+  const allY   = chain.nodes.map((n) => pos[n.id]?.y ?? 0);
+  const maxX   = Math.max(...allX, NODE_W / 2);
+  const maxY   = Math.max(...allY, NODE_H / 2);
   const LEGEND_H = 24;
-  const svgW = PAD_X * 2 + colCount * (NODE_W + COL_GAP) - COL_GAP;
-  const svgH = PAD_Y * 2 + maxPerCol * ROW_GAP + LEGEND_H + 8;
+  const svgW = maxX + NODE_W / 2 + PAD_X;
+  const svgH = maxY + NODE_H / 2 + PAD_Y + LEGEND_H + 8;
 
   return (
     <div className="flex flex-col gap-4">
