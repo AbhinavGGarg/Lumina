@@ -40,6 +40,11 @@ Rules for selecting agents:
 - If you see Python dependency files (requirements.txt, Pipfile, etc.), add "deps_py".
 - If you see Node.js dependency files (package.json, yarn.lock, etc.), add "deps_js".
 - ALWAYS add "secrets".
+
+Grounding rules:
+- Mention ONLY technologies that are explicitly evidenced by filenames/extensions in the snapshot.
+- Do NOT claim C/C++ unless C/C++ source/header files are visible in the snapshot.
+- If uncertain, prefer a conservative "mixed stack" description instead of guessing.
 """
 
 REPORT_SYSTEM = (

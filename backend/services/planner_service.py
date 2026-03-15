@@ -19,96 +19,28 @@ from ..core.prompts import PLANNER_SYSTEM
 # Maximum number of files to walk when fingerprinting.
 _MAX_FILES_WALKED = 1000
 
-# ── Language detection tables ─────────────────────────────────────────────────
+# Valid planner agents for repository targets.
+_VALID_REPO_AGENTS = ("static_c", "static", "deps_py", "deps_js", "secrets")
 
-# Maps file extension → canonical language name.
-_LANG_EXTENSIONS: dict[str, str] = {
-    ".py":   "python",
-    ".js":   "javascript",
-    ".mjs":  "javascript",
-    ".cjs":  "javascript",
-    ".jsx":  "javascript",
-    ".ts":   "typescript",
-    ".tsx":  "typescript",
-    ".c":    "c",
-    ".cpp":  "c",
-    ".cc":   "c",
-    ".cxx":  "c",
-    ".h":    "c",
-    ".hpp":  "c",
-    ".go":   "go",
-    ".rs":   "rust",
-    ".java": "java",
-    ".rb":   "ruby",
-    ".php":  "php",
+# Directories excluded from repo fingerprinting.
+_SKIP_DIRS = {
+    ".git", "node_modules", "__pycache__", "vendor", "target", "build",
+    "dist", "out", ".next", ".venv", "venv", "env",
 }
 
-# Maps language → agents that should be run for it.
-_LANG_AGENT_MAP: dict[str, list[str]] = {
-    "python":     ["static"],
-    "javascript": ["static"],
-    "typescript": ["static"],
-    "c":          ["static_c"],
-    "go":         ["static"],
-    "rust":       ["static"],
-    "java":       ["static"],
-    "ruby":       ["static"],
-    "php":        ["static"],
+# Lightweight extension-to-language groups used only for architecture grounding
+# (not for selecting tools).
+_LANG_GROUPS: dict[str, set[str]] = {
+    "python": {".py"},
+    "javascript": {".js", ".mjs", ".cjs", ".jsx"},
+    "typescript": {".ts", ".tsx"},
+    "c/c++": {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"},
+    "go": {".go"},
+    "rust": {".rs"},
+    "java": {".java"},
 }
-
-# Dependency files that trigger dependency-audit agents.
-_PY_DEP_FILES  = {"requirements.txt", "requirements.in", "Pipfile", "Pipfile.lock",
-                  "pyproject.toml", "setup.py", "setup.cfg"}
-_JS_DEP_FILES  = {"package.json", "yarn.lock", "pnpm-lock.yaml", "package-lock.json"}
 
 # ── Private helpers ───────────────────────────────────────────────────────────
-
-def _detect_languages(repo_path: str) -> list[str]:
-    """Walk the repo and return languages ordered by file count (most common first)."""
-    lang_counts: dict[str, int] = defaultdict(int)
-    for dirpath, dirnames, filenames in os.walk(repo_path):
-        dirnames[:] = [
-            d for d in dirnames
-            if not d.startswith(".")
-            and d not in {"node_modules", "__pycache__", "vendor", "target", "build", ".git"}
-        ]
-        for fname in filenames:
-            ext = Path(fname).suffix.lower()
-            lang = _LANG_EXTENSIONS.get(ext)
-            if lang:
-                lang_counts[lang] += 1
-    return [lang for lang, _ in sorted(lang_counts.items(), key=lambda x: -x[1])]
-
-
-def _agents_for_languages(languages: list[str], repo_path: str) -> list[str]:
-    """Build a deterministic, deduplicated agent list from detected languages.
-
-    Also inspects root-level dependency manifests to decide whether to run
-    deps_py / deps_js even when the main languages were already covered.
-    """
-    agents: list[str] = []
-    seen: set[str] = set()
-
-    def _add(a: str) -> None:
-        if a not in seen:
-            seen.add(a)
-            agents.append(a)
-
-    for lang in languages:
-        for agent in _LANG_AGENT_MAP.get(lang, []):
-            _add(agent)
-
-    # Check dependency manifests at repo root.
-    if os.path.isdir(repo_path):
-        root_entries = set(os.listdir(repo_path))
-        if root_entries & _PY_DEP_FILES:
-            _add("deps_py")
-        if root_entries & _JS_DEP_FILES:
-            _add("deps_js")
-
-    _add("secrets")
-    return agents
-
 
 def _extract_first_json_object(text: str) -> dict | None:
     """Extract the first syntactically valid JSON object from arbitrary text.
@@ -138,6 +70,151 @@ def _extract_first_json_object(text: str) -> dict | None:
     return None
 
 
+def _should_skip_dir(name: str) -> bool:
+    return name.startswith(".") or name in _SKIP_DIRS
+
+
+def _collect_repo_signals(repo_path: str) -> dict:
+    """Collect observed language/dependency signals from repository contents."""
+    ext_counts: dict[str, int] = defaultdict(int)
+    files_checked = 0
+
+    for dirpath, dirnames, filenames in os.walk(repo_path):
+        dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
+        for fname in filenames:
+            ext = Path(fname).suffix.lower()
+            if ext:
+                ext_counts[ext] += 1
+            files_checked += 1
+            if files_checked >= _MAX_FILES_WALKED:
+                break
+        if files_checked >= _MAX_FILES_WALKED:
+            break
+
+    root_entries = set(os.listdir(repo_path)) if os.path.isdir(repo_path) else set()
+    observed_languages: list[str] = []
+    for lang, exts in _LANG_GROUPS.items():
+        if any(ext_counts.get(ext, 0) > 0 for ext in exts):
+            observed_languages.append(lang)
+
+    return {
+        "ext_counts": dict(ext_counts),
+        "observed_languages": observed_languages,
+        "files_checked": files_checked,
+        "has_py_deps": bool(root_entries & {"requirements.txt", "requirements.in", "Pipfile", "Pipfile.lock", "pyproject.toml", "setup.py", "setup.cfg"}),
+        "has_js_deps": bool(root_entries & {"package.json", "yarn.lock", "pnpm-lock.yaml", "package-lock.json"}),
+    }
+
+
+def _assert_repo_accessible(repo_path: str) -> None:
+    """Validate repo path is readable in the backend runtime (Docker container)."""
+    if not os.path.exists(repo_path):
+        raise ValueError(
+            f"Repository path does not exist in backend runtime: {repo_path}. "
+            "If backend runs in Docker, mount the folder under /repos or /tmp."
+        )
+    if not os.path.isdir(repo_path):
+        raise ValueError(f"Repository target is not a directory: {repo_path}")
+
+
+def _build_grounded_architecture_summary(signals: dict) -> str:
+    """Create a concise architecture summary based only on observed signals."""
+    langs: list[str] = signals.get("observed_languages", [])
+    has_py_deps = bool(signals.get("has_py_deps"))
+    has_js_deps = bool(signals.get("has_js_deps"))
+
+    if not langs:
+        base = "Repository with mixed or unclassified source files"
+    elif len(langs) == 1:
+        base = f"Repository primarily built with {langs[0]}"
+    else:
+        base = f"Repository with a mixed stack ({', '.join(langs)})"
+
+    dep_parts: list[str] = []
+    if has_js_deps:
+        dep_parts.append("Node.js dependencies")
+    if has_py_deps:
+        dep_parts.append("Python dependencies")
+
+    if dep_parts:
+        return f"{base} and {', '.join(dep_parts)}."
+    return f"{base}."
+
+
+def _mentions_unobserved_stack(summary: str, signals: dict) -> bool:
+    """Check whether summary mentions languages not present in observed signals."""
+    text = summary.lower()
+    observed = set(signals.get("observed_languages", []))
+
+    checks = {
+        "python": ["python"],
+        "javascript": ["javascript", "node.js", "nodejs", "node"],
+        "typescript": ["typescript"],
+        "c/c++": ["c/c++", "c++", " c ", "native"],
+        "go": ["go", "golang"],
+        "rust": ["rust"],
+        "java": ["java"],
+    }
+
+    for lang, tokens in checks.items():
+        if any(tok in text for tok in tokens) and lang not in observed:
+            return True
+    return False
+
+
+def _normalize_repo_agents(raw_agents: list[str] | tuple[str, ...] | None) -> list[str]:
+    """Keep only known repo agents and preserve order."""
+    if not raw_agents:
+        return []
+
+    valid = set(_VALID_REPO_AGENTS)
+    normalized: list[str] = []
+    seen: set[str] = set()
+
+    for item in raw_agents:
+        agent = str(item).strip()
+        if agent in valid and agent not in seen:
+            seen.add(agent)
+            normalized.append(agent)
+    return normalized
+
+
+def _extract_plan_dict(text: str) -> dict | None:
+    """Parse planner output from either raw JSON or JSON wrapped in prose."""
+    clean = re.sub(r"^```(?:json)?\s*", "", text.strip())
+    clean = re.sub(r"\s*```$", "", clean).strip()
+    try:
+        data = json.loads(clean)
+        if isinstance(data, dict):
+            return data
+    except json.JSONDecodeError:
+        pass
+    return _extract_first_json_object(text)
+
+
+def _repair_plan_with_llm(raw_text: str, fingerprint: str) -> dict | None:
+    """Second-pass recovery: ask the LLM to reformat content into strict JSON."""
+    llm = get_llm()
+    repair_prompt = (
+        "You are a JSON formatter. Convert the planner output into valid JSON only. "
+        "Return exactly one JSON object with keys: architecture_summary, threat_model, agents_plan. "
+        "Allowed agents_plan values only: [\"static_c\", \"static\", \"deps_py\", \"deps_js\", \"secrets\"].\n\n"
+        f"Repository Snapshot:\n{fingerprint}\n\n"
+        f"Planner Output To Repair:\n{raw_text}"
+    )
+    response = llm.invoke([HumanMessage(content=repair_prompt)])
+    return _extract_plan_dict(str(response.content or ""))
+
+
+def _safe_repo_fallback() -> dict:
+    """Broad fallback so scans still run meaningfully if planner parsing fails."""
+    return {
+        "architecture_summary": "Repository (fallback plan)",
+        "threat_model": "Code, dependency, and secret-exposure threats across mixed stack.",
+        "agents": ["static", "static_c", "deps_py", "deps_js", "secrets"],
+    }
+
+
 def _generate_fingerprint(repo_path: str) -> str:
     """Walk the repository and build a compact architecture fingerprint.
     
@@ -149,11 +226,7 @@ def _generate_fingerprint(repo_path: str) -> str:
     files_checked = 0
     for dirpath, dirnames, filenames in os.walk(repo_path):
         # Skip hidden dirs and common noise dirs.
-        dirnames[:] = [
-            d for d in dirnames
-            if not d.startswith(".")
-            and d not in {"node_modules", "__pycache__", "vendor", "target", "build"}
-        ]
+        dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
         
         rel_dir = os.path.relpath(dirpath, repo_path)
         is_root = (rel_dir == ".")
@@ -187,64 +260,46 @@ def _generate_fingerprint(repo_path: str) -> str:
     return "\n".join(lines)
 
 
-def _call_llm_planner(
-    fingerprint: str,
-    fallback_languages: list[str],
-    repo_path: str,
-) -> dict:
+def _call_llm_planner(fingerprint: str, signals: dict) -> dict:
     """Pass the fingerprint to the LLM and receive a scan plan.
 
-    Attempts LLM-driven planning first.  If the LLM response cannot be
-    parsed as JSON, falls back to a fully deterministic plan derived from
-    the detected languages so the scan always runs meaningful agents.
+    Attempts LLM-driven planning first. If parsing fails, retries once with
+    a dedicated JSON-repair prompt. If still failing, uses a broad safe plan.
     """
     llm = get_llm()
     prompt = f"{PLANNER_SYSTEM}\n\nRepository Snapshot:\n{fingerprint}"
 
     try:
         response = llm.invoke([HumanMessage(content=prompt)])
-        text = response.content.strip()
+        text = str(response.content or "")
 
-        # ── Attempt 1: strip markdown fences and direct-parse ──
-        clean = re.sub(r"^```(?:json)?\s*", "", text)
-        clean = re.sub(r"\s*```$", "", clean).strip()
-        data: dict | None = None
-        try:
-            data = json.loads(clean)
-        except json.JSONDecodeError:
-            pass
-
-        # ── Attempt 2: extract first JSON object from anywhere in the text ──
-        if data is None:
-            data = _extract_first_json_object(text)
+        data = _extract_plan_dict(text)
+        if not data:
+            logging.warning("Planner output was not valid JSON; attempting repair pass.")
+            data = _repair_plan_with_llm(text, fingerprint)
 
         if data and isinstance(data, dict):
-            # Accept either "agents_plan" or "agents" key from the LLM.
-            llm_agents = data.get("agents_plan") or data.get("agents") or []
-            if not isinstance(llm_agents, list) or not llm_agents:
-                # LLM gave us the arch/threat info but an empty/bad agent list.
-                llm_agents = _agents_for_languages(fallback_languages, repo_path)
+            raw_agents = data.get("agents_plan") or data.get("agents") or []
+            agents = _normalize_repo_agents(raw_agents if isinstance(raw_agents, list) else [])
+            if not agents:
+                logging.warning("Planner produced no valid agents; using safe fallback agents.")
+                agents = _safe_repo_fallback()["agents"]
+
+            architecture = str(data.get("architecture_summary") or "")
+            if not architecture or _mentions_unobserved_stack(architecture, signals):
+                architecture = _build_grounded_architecture_summary(signals)
+            threat_model = str(data.get("threat_model") or "Code and dependency security risks.")
             return {
-                "architecture_summary": data.get("architecture_summary", ""),
-                "threat_model":         data.get("threat_model", ""),
-                "agents":               llm_agents,
+                "architecture_summary": architecture,
+                "threat_model": threat_model,
+                "agents": agents,
             }
 
     except Exception as e:
         logging.error("LLM planner invocation failed: %s", e)
 
-    # ── Full deterministic fallback ──────────────────────────────────────────
-    logging.warning(
-        "LLM planner parsing failed — using deterministic fallback for languages: %s",
-        fallback_languages,
-    )
-    agents = _agents_for_languages(fallback_languages, repo_path)
-    lang_str = ", ".join(fallback_languages) if fallback_languages else "mixed"
-    return {
-        "architecture_summary": f"Repository ({lang_str})",
-        "threat_model":         "Code vulnerabilities, dependency issues, and secret exposure.",
-        "agents":               agents,
-    }
+    logging.warning("LLM planner failed after recovery; using safe fallback plan.")
+    return _safe_repo_fallback()
 
 
 # ── Public planner API ────────────────────────────────────────────────────────
@@ -306,13 +361,20 @@ def plan(target: str) -> ScanPlan:
         )
 
     # Filesystem target -- dynamically architect a plan.
+    _assert_repo_accessible(target)
+
     fingerprint = _generate_fingerprint(target)
     logging.info("Generated repo fingerprint:\n%s", fingerprint)
 
-    languages = _detect_languages(target)
-    logging.info("Detected languages: %s", languages)
+    signals = _collect_repo_signals(target)
+    logging.info("Observed language signals: %s", signals.get("observed_languages", []))
+    if int(signals.get("files_checked", 0)) == 0:
+        raise ValueError(
+            f"Repository is empty or unreadable after filtering: {target}. "
+            "Ensure source files are present under /repos or /tmp in the backend container."
+        )
 
-    plan_data = _call_llm_planner(fingerprint, languages, target)
+    plan_data = _call_llm_planner(fingerprint, signals)
     
     return ScanPlan(
         target_type="repo",

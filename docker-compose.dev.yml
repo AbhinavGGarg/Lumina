@@ -25,6 +25,9 @@ services:
       # Hot reload the code so you don't have to rebuild docker on every python change
       - ./backend:/app/backend:ro
       - ./repos:/repos:ro
+      # Allow scanning host local folders directly by absolute path
+      - /tmp:/tmp:ro
+      - /Users:/Users:ro
     extra_hosts:
       # Allows Linux docker containers to ping native Mac localhost as 'host.docker.internal'
       - "host.docker.internal:host-gateway"
