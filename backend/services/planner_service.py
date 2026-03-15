@@ -14,7 +14,7 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage
 
 from .llm_service import get_llm
-from ..core.prompts import PLANNER_SYSTEM
+from ..core.prompts import PLANNER_SYSTEM, URL_PLANNER_SYSTEM
 
 # Maximum number of files to walk when fingerprinting.
 _MAX_FILES_WALKED = 1000
@@ -22,10 +22,23 @@ _MAX_FILES_WALKED = 1000
 # Valid planner agents for repository targets.
 _VALID_REPO_AGENTS = ("static_c", "static", "deps_py", "deps_js", "secrets")
 
+# Valid planner agents for URL targets (attack_chain and report are always appended).
+_VALID_URL_AGENTS = ("recon", "sqli", "xss", "secrets")
+
 # Directories excluded from repo fingerprinting.
 _SKIP_DIRS = {
-    ".git", "node_modules", "__pycache__", "vendor", "target", "build",
-    "dist", "out", ".next", ".venv", "venv", "env",
+    ".git",
+    "node_modules",
+    "__pycache__",
+    "vendor",
+    "target",
+    "build",
+    "dist",
+    "out",
+    ".next",
+    ".venv",
+    "venv",
+    "env",
 }
 
 # Lightweight extension-to-language groups used only for architecture grounding
@@ -41,6 +54,7 @@ _LANG_GROUPS: dict[str, set[str]] = {
 }
 
 # ── Private helpers ───────────────────────────────────────────────────────────
+
 
 def _extract_first_json_object(text: str) -> dict | None:
     """Extract the first syntactically valid JSON object from arbitrary text.
@@ -101,8 +115,22 @@ def _collect_repo_signals(repo_path: str) -> dict:
         "ext_counts": dict(ext_counts),
         "observed_languages": observed_languages,
         "files_checked": files_checked,
-        "has_py_deps": bool(root_entries & {"requirements.txt", "requirements.in", "Pipfile", "Pipfile.lock", "pyproject.toml", "setup.py", "setup.cfg"}),
-        "has_js_deps": bool(root_entries & {"package.json", "yarn.lock", "pnpm-lock.yaml", "package-lock.json"}),
+        "has_py_deps": bool(
+            root_entries
+            & {
+                "requirements.txt",
+                "requirements.in",
+                "Pipfile",
+                "Pipfile.lock",
+                "pyproject.toml",
+                "setup.py",
+                "setup.cfg",
+            }
+        ),
+        "has_js_deps": bool(
+            root_entries
+            & {"package.json", "yarn.lock", "pnpm-lock.yaml", "package-lock.json"}
+        ),
     }
 
 
@@ -162,6 +190,175 @@ def _mentions_unobserved_stack(summary: str, signals: dict) -> bool:
     return False
 
 
+def _fingerprint_url(url: str) -> str:
+    """Quick pre-scan fingerprint for URL targets using httpx and whatweb.
+
+    Deliberately avoids nmap (slow) -- this is for planning only. The full
+    recon_node will run nmap after the plan is decided.
+    """
+    # Local import to avoid circular dependency with tool modules.
+    from ..tools.recon import run_httpx, run_whatweb
+
+    httpx_result = run_httpx.invoke({"url": url})
+    whatweb_result = run_whatweb.invoke({"url": url})
+
+    lines = [f"Target URL: {url}"]
+
+    if httpx_result.get("results"):
+        for entry in httpx_result["results"][:3]:
+            if entry.get("status-code"):
+                lines.append(f"HTTP Status: {entry['status-code']}")
+            if entry.get("title"):
+                lines.append(f"Page Title: {entry['title']}")
+            if entry.get("tech"):
+                tech = entry["tech"]
+                if isinstance(tech, list) and tech:
+                    lines.append(
+                        f"Detected Technologies: {', '.join(str(t) for t in tech[:15])}"
+                    )
+            if entry.get("content-type"):
+                lines.append(f"Content-Type: {entry['content-type']}")
+            if entry.get("webserver"):
+                lines.append(f"Web Server: {entry['webserver']}")
+    elif httpx_result.get("error"):
+        lines.append(f"HTTP probe error: {httpx_result['error'][:200]}")
+
+    if whatweb_result.get("output"):
+        lines.append(f"WhatWeb fingerprint:\n{whatweb_result['output'][:800]}")
+    elif whatweb_result.get("error"):
+        lines.append(f"WhatWeb error: {whatweb_result['error'][:200]}")
+
+    return "\n".join(lines)
+
+
+def _normalize_url_agents(raw_agents: list[str] | None) -> list[str]:
+    """Keep only known URL agents and preserve order. Always includes recon."""
+    valid = set(_VALID_URL_AGENTS)
+    normalized: list[str] = []
+    seen: set[str] = set()
+
+    for item in raw_agents or []:
+        agent = str(item).strip()
+        if agent in valid and agent not in seen:
+            seen.add(agent)
+            normalized.append(agent)
+
+    if not normalized:
+        normalized = ["recon"]
+    elif "recon" not in seen:
+        normalized.insert(0, "recon")
+
+    return normalized
+
+
+def _safe_url_fallback() -> dict:
+    """Broad fallback URL plan when LLM planning fails."""
+    return {
+        "architecture_summary": "Live Web Application",
+        "threat_model": "Network layer threats, XSS, and SQLi risks.",
+        "agents": ["recon", "sqli", "xss"],
+    }
+
+
+def _repair_url_plan_with_llm(raw_text: str, fingerprint: str) -> dict | None:
+    """Second-pass recovery for URL planner output into strict JSON."""
+    llm = get_llm()
+    repair_prompt = (
+        "You are a JSON formatter. Convert the URL planner output into valid JSON only. "
+        "Return exactly one JSON object with keys: architecture_summary, threat_model, agents_plan. "
+        'Allowed agents_plan values only: ["recon", "sqli", "xss", "secrets"].\n\n'
+        f"Pre-Scan Fingerprint:\n{fingerprint}\n\n"
+        f"Planner Output To Repair:\n{raw_text}"
+    )
+    response = llm.invoke([HumanMessage(content=repair_prompt)])
+    return _extract_plan_dict(str(response.content or ""))
+
+
+def _apply_url_agent_guardrails(
+    target: str, fingerprint: str, agents: list[str]
+) -> list[str]:
+    """Ensure URL scans stay useful when pre-scan signal quality is low.
+
+    If the target is local or fingerprinting was inconclusive/error-prone, keep
+    baseline web-app checks (sqli/xss) instead of dropping to recon-only.
+    """
+    normalized = _normalize_url_agents(agents)
+    low = fingerprint.lower()
+
+    uncertain = (
+        "connection refused" in low
+        or "timed out" in low
+        or "http probe error" in low
+        or "whatweb error" in low
+        or (
+            "detected technologies:" not in low
+            and "page title:" not in low
+            and "content-type:" not in low
+        )
+    )
+
+    local_target = (
+        "localhost" in target.lower() or "127.0.0.1" in target or "0.0.0.0" in target
+    )
+
+    if uncertain or local_target:
+        if "sqli" not in normalized:
+            normalized.append("sqli")
+        if "xss" not in normalized:
+            normalized.append("xss")
+
+    return normalized
+
+
+def _call_llm_url_planner(target: str, fingerprint: str) -> dict:
+    """Pass the URL pre-scan fingerprint to the LLM to select relevant agents.
+
+    Mirrors _call_llm_planner but for URL targets.
+    """
+    llm = get_llm()
+    prompt = f"{URL_PLANNER_SYSTEM}\n\nPre-Scan Fingerprint:\n{fingerprint}"
+
+    try:
+        response = llm.invoke([HumanMessage(content=prompt)])
+        text = str(response.content or "")
+
+        data = _extract_plan_dict(text)
+        if not data:
+            logging.warning(
+                "URL planner output was not valid JSON; attempting repair pass."
+            )
+            data = _repair_url_plan_with_llm(text, fingerprint)
+
+        if data and isinstance(data, dict):
+            raw_agents = data.get("agents_plan") or data.get("agents") or []
+            selected = raw_agents if isinstance(raw_agents, list) else []
+            agents = _apply_url_agent_guardrails(target, fingerprint, selected)
+
+            architecture = str(data.get("architecture_summary") or "").strip()
+            if not architecture:
+                architecture = "Live Web Application"
+
+            threat_model = str(
+                data.get("threat_model") or "Network layer threats."
+            ).strip()
+
+            return {
+                "architecture_summary": architecture,
+                "threat_model": threat_model,
+                "agents": agents,
+            }
+
+    except Exception as e:
+        logging.error("LLM URL planner invocation failed: %s", e)
+
+    logging.warning("URL planner failed after recovery; using safe fallback plan.")
+    fallback = _safe_url_fallback()
+    fallback["agents"] = _apply_url_agent_guardrails(
+        target, fingerprint, fallback["agents"]
+    )
+    return fallback
+
+
 def _normalize_repo_agents(raw_agents: list[str] | tuple[str, ...] | None) -> list[str]:
     """Keep only known repo agents and preserve order."""
     if not raw_agents:
@@ -198,7 +395,7 @@ def _repair_plan_with_llm(raw_text: str, fingerprint: str) -> dict | None:
     repair_prompt = (
         "You are a JSON formatter. Convert the planner output into valid JSON only. "
         "Return exactly one JSON object with keys: architecture_summary, threat_model, agents_plan. "
-        "Allowed agents_plan values only: [\"static_c\", \"static\", \"deps_py\", \"deps_js\", \"secrets\"].\n\n"
+        'Allowed agents_plan values only: ["static_c", "static", "deps_py", "deps_js", "secrets"].\n\n'
         f"Repository Snapshot:\n{fingerprint}\n\n"
         f"Planner Output To Repair:\n{raw_text}"
     )
@@ -217,28 +414,28 @@ def _safe_repo_fallback() -> dict:
 
 def _generate_fingerprint(repo_path: str) -> str:
     """Walk the repository and build a compact architecture fingerprint.
-    
+
     Lists root files explicitly and aggregates file extensions per directory.
     """
     root_files = []
     dir_summaries: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    
+
     files_checked = 0
     for dirpath, dirnames, filenames in os.walk(repo_path):
         # Skip hidden dirs and common noise dirs.
         dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
-        
+
         rel_dir = os.path.relpath(dirpath, repo_path)
-        is_root = (rel_dir == ".")
-        
+        is_root = rel_dir == "."
+
         for fname in filenames:
             ext = Path(fname).suffix.lower() or fname.lower()
-            
+
             if is_root:
                 root_files.append(fname)
-            
+
             dir_summaries[rel_dir][ext] += 1
-            
+
             files_checked += 1
             if files_checked >= _MAX_FILES_WALKED:
                 break
@@ -249,14 +446,14 @@ def _generate_fingerprint(repo_path: str) -> str:
     lines = ["Root Files:"]
     for f in sorted(root_files):
         lines.append(f"  - {f}")
-        
+
     lines.append("\nDirectory Summary:")
     for directory, exts in sorted(dir_summaries.items()):
         total = sum(exts.values())
         ext_str = ", ".join(f"{ext}: {count}" for ext, count in sorted(exts.items()))
         dir_name = "/" if directory == "." else f"/{directory}"
         lines.append(f"  {dir_name}: {total} files ({ext_str})")
-        
+
     return "\n".join(lines)
 
 
@@ -275,20 +472,28 @@ def _call_llm_planner(fingerprint: str, signals: dict) -> dict:
 
         data = _extract_plan_dict(text)
         if not data:
-            logging.warning("Planner output was not valid JSON; attempting repair pass.")
+            logging.warning(
+                "Planner output was not valid JSON; attempting repair pass."
+            )
             data = _repair_plan_with_llm(text, fingerprint)
 
         if data and isinstance(data, dict):
             raw_agents = data.get("agents_plan") or data.get("agents") or []
-            agents = _normalize_repo_agents(raw_agents if isinstance(raw_agents, list) else [])
+            agents = _normalize_repo_agents(
+                raw_agents if isinstance(raw_agents, list) else []
+            )
             if not agents:
-                logging.warning("Planner produced no valid agents; using safe fallback agents.")
+                logging.warning(
+                    "Planner produced no valid agents; using safe fallback agents."
+                )
                 agents = _safe_repo_fallback()["agents"]
 
             architecture = str(data.get("architecture_summary") or "")
             if not architecture or _mentions_unobserved_stack(architecture, signals):
                 architecture = _build_grounded_architecture_summary(signals)
-            threat_model = str(data.get("threat_model") or "Code and dependency security risks.")
+            threat_model = str(
+                data.get("threat_model") or "Code and dependency security risks."
+            )
             return {
                 "architecture_summary": architecture,
                 "threat_model": threat_model,
@@ -303,6 +508,7 @@ def _call_llm_planner(fingerprint: str, signals: dict) -> dict:
 
 
 # ── Public planner API ────────────────────────────────────────────────────────
+
 
 class ScanPlan:
     """Immutable result of the planning phase.
@@ -324,7 +530,7 @@ class ScanPlan:
         self.target_type = target_type
         self.architecture_summary = architecture_summary
         self.threat_model = threat_model
-        
+
         # Ensure report is always the last agent
         if "report" not in agents:
             agents.append("report")
@@ -341,7 +547,8 @@ def plan(target: str) -> ScanPlan:
     """Produce a tailored scan plan for the given target.
 
     For filesystem paths, generates a structural fingerprint and uses an LLM
-    to architect a plan. For URLs, the full network-oriented pipeline is returned.
+    to architect a plan. For URLs, performs a quick pre-scan fingerprint then
+    uses an LLM to select only the relevant network agents.
 
     Args:
         target: URL (http/https) or absolute filesystem path.
@@ -352,12 +559,23 @@ def plan(target: str) -> ScanPlan:
     is_path = target.startswith("/") or target.startswith(".")
 
     if not is_path:
-        # URL target -- full network scan pipeline.
+        # URL target -- quick pre-scan fingerprint then LLM-driven agent selection.
+        logging.info("Fingerprinting URL target for adaptive planning: %s", target)
+        fingerprint = _fingerprint_url(target)
+        logging.info("URL pre-scan fingerprint:\n%s", fingerprint)
+
+        plan_data = _call_llm_url_planner(target, fingerprint)
+
+        agents = plan_data["agents"]
+        # attack_chain always runs after attack-surface agents for URL targets.
+        if "attack_chain" not in agents:
+            agents.append("attack_chain")
+
         return ScanPlan(
             target_type="url",
-            architecture_summary="Live Web Application",
-            threat_model="Network layer threats, XSS, and SQLi.",
-            agents=["recon", "sqli", "xss", "deps", "secrets", "attack_chain", "report"],
+            architecture_summary=plan_data["architecture_summary"],
+            threat_model=plan_data["threat_model"],
+            agents=agents,
         )
 
     # Filesystem target -- dynamically architect a plan.
@@ -375,7 +593,7 @@ def plan(target: str) -> ScanPlan:
         )
 
     plan_data = _call_llm_planner(fingerprint, signals)
-    
+
     return ScanPlan(
         target_type="repo",
         architecture_summary=plan_data["architecture_summary"],
