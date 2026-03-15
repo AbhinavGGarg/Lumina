@@ -21,6 +21,9 @@ CRITICAL RULES FOR IGNORING FALSE POSITIVES:
 1. "No vulnerability found", "Tool output clean", "0 vulnerabilities", or "No sensitive data found" are NOT security findings. Do NOT create findings just to report that a tool ran successfully.
 2. If a tool prints a log level like `[CRITICAL]` or `[ERROR]` but the actual message is "no forms found", "could not connect", or "skipping", this is NOT a vulnerability.
 3. If there are no real, actionable security flaws indicating a weakness in the target, you MUST return an empty array: []
+4. Connectivity and runtime issues are NOT vulnerabilities: "connection refused", "timed out", DNS failures, TLS handshake errors, "unable to connect", "target did not respond", and similar scanner/runtime failures must be ignored as findings.
+5. An open TCP port or identified service/version alone is NOT a vulnerability. Only report it if the tool output contains a concrete exploitable weakness (e.g., explicit CVE, confirmed injection, auth bypass, exposed secret, insecure configuration with clear impact).
+6. Never label scanner/tool operational failures as SQLi/XSS/RCE. If sqlmap/dalfox cannot reach the target or found no injectable/reflected parameters, return [].
 """
 
 ATTACK_CHAIN_SYSTEM = """You are a senior red team operator and threat intelligence analyst.
@@ -114,6 +117,37 @@ Rules for selecting agents:
 - If you see Python dependency files (requirements.txt, Pipfile, etc.), add "deps_py".
 - If you see Node.js dependency files (package.json, yarn.lock, etc.), add "deps_js".
 - ALWAYS add "secrets".
+
+Grounding rules:
+- Mention ONLY technologies that are explicitly evidenced by filenames/extensions in the snapshot.
+- Do NOT claim C/C++ unless C/C++ source/header files are visible in the snapshot.
+- If uncertain, prefer a conservative "mixed stack" description instead of guessing.
+"""
+
+URL_PLANNER_SYSTEM = """You are a penetration testing specialist. You have received a quick pre-scan fingerprint of a live web target.
+
+Analyse what was discovered and select only the security agents that are genuinely relevant to this target.
+
+Available agents (choose ONLY from this strict list):
+- "recon"    — Full port scan + extended HTTP probing + technology fingerprinting (nmap, httpx, whatweb). Include unless the target was entirely unreachable.
+- "sqli"     — SQL injection testing via sqlmap. ONLY include if the target clearly serves HTML forms, has login/register/search/auth endpoints, or is a recognised CMS. Do NOT include for pure REST/JSON APIs, static sites, or SPAs with no server-side DB-backed queries.
+- "xss"      — XSS testing via dalfox. ONLY include if the target serves HTML with user-reflected input. Do NOT include for pure JSON REST APIs.
+- "secrets"  — Scans the /repos mount for hardcoded secrets. Only useful if source code is also mounted alongside the URL scan.
+
+Return ONLY a JSON object -- no markdown, no explanation, no backticks:
+{
+  "architecture_summary": "1-2 sentence description based only on what was actually observed (server, tech stack, CMS, content type, etc.)",
+  "threat_model": "1-2 sentence description of specific threat vectors based on the observed stack",
+  "agents_plan": ["recon", "sqli", "xss"]
+}
+
+Rules:
+- Always include "recon" unless the target returned a connection error.
+- Base architecture_summary strictly on what the fingerprint shows -- do not invent or guess technologies not visible in the output.
+- If the fingerprint shows an API (JSON responses, no HTML), omit "sqli" and "xss".
+- If the fingerprint shows a CMS or login page, include "sqli" and "xss".
+- If the fingerprint is inconclusive (connection errors/timeouts/insufficient signal), default to including "sqli" and "xss" so the scan does not under-test.
+- Keep agents_plan short -- only include what is genuinely relevant.
 """
 
 REPORT_SYSTEM = (

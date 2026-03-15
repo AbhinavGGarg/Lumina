@@ -156,6 +156,12 @@ export function ReportModal({
 }: ReportModalProps) {
   const prefersReducedMotion = useReducedMotion();
 
+  function handleBackdropClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
 
@@ -185,18 +191,21 @@ export function ReportModal({
         >
           <motion.div
             className="absolute inset-0 bg-black/72"
-            onClick={onClose}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : 0.12, ease: "easeOut" }}
           />
 
-          <div className="relative h-full w-full flex items-center justify-center p-4 md:p-8">
+          <div
+            className="relative h-full w-full flex items-center justify-center p-4 md:p-8"
+            onClick={handleBackdropClick}
+          >
             <motion.section
               role="dialog"
               aria-modal="true"
               className="w-full max-w-6xl h-[88vh] bg-[#101010] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col transform-gpu will-change-transform"
+              onClick={(event) => event.stopPropagation()}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
