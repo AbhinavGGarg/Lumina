@@ -350,7 +350,6 @@ export default function ScanPage() {
 
         {/* ── Architecture Map + Findings by Component ─────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-
           <div className="lg:col-span-7 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
             <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
               <GitBranch className="w-4 h-4 text-white/40" />
@@ -366,7 +365,6 @@ export default function ScanPage() {
             </div>
             <FindingsChart scan={scan} />
           </div>
-
         </div>
       </div>
 
