@@ -21,6 +21,7 @@ const AGENT_META: Record<string, { label: string; icon: string; tools: string }>
 
 interface Props {
   scan: ScanState;
+  now?: number; // current Unix timestamp (seconds) — passed from parent to avoid per-component timers
 }
 
 function normalizeAgentKey(agentKey: string): string {
@@ -71,8 +72,13 @@ function agentStatus(
   return "queued";
 }
 
-export function ScanProgress({ scan }: Props) {
-  // Build the ordered list from agents_plan when available, otherwise fall back to all agents.
+/** Format seconds as "1m 23s" or "45s". */
+function fmtSecs(s: number): string {
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+export function ScanProgress({ scan, now }: Props) {
   const planKeys =
     scan.agents_plan.length > 0
       ? ["planner", ...scan.agents_plan]
@@ -82,10 +88,41 @@ export function ScanProgress({ scan }: Props) {
     .filter((key) => AGENT_META[key])
     .map((key) => ({ key, ...AGENT_META[key] }));
 
+  // Build a timing label per agent.
+  const timingLabel = (key: string, status: "done" | "running" | "queued" | "skipped"): string | null => {
+    const startedAt = scan.agent_timings?.[key];
+    if (!startedAt) return null;
+
+    if (status === "running" && now) {
+      const elapsed = Math.max(0, Math.floor(now - startedAt));
+      return `${fmtSecs(elapsed)}`;
+    }
+
+    if (status === "done") {
+      // Estimate duration: find the next agent in the plan that has a timing.
+      const planKeys2 = scan.agents_plan ?? [];
+      const idx = planKeys2.indexOf(key);
+      let nextStart: number | null = null;
+      for (let i = idx + 1; i < planKeys2.length; i++) {
+        const t = scan.agent_timings?.[planKeys2[i]];
+        if (t) { nextStart = t; break; }
+      }
+      // Fall back to using now if scan is complete.
+      if (!nextStart && scan.status === "complete" && now) nextStart = now;
+      if (nextStart) {
+        const dur = Math.max(0, Math.floor(nextStart - startedAt));
+        return `${fmtSecs(dur)}`;
+      }
+    }
+
+    return null;
+  };
+
   return (
     <div className="flex flex-col gap-1 w-full">
       {visibleAgents.map((agent) => {
         const status = agentStatus(agent.key, scan);
+        const timing = timingLabel(agent.key, status);
         return (
           <div
             key={agent.key}
@@ -98,7 +135,14 @@ export function ScanProgress({ scan }: Props) {
                 <p className="text-xs text-muted-foreground">{agent.tools}</p>
               </div>
             </div>
-            <StatusBadge status={status} />
+            <div className="flex items-center gap-2">
+              {timing && (
+                <span className={`text-[10px] font-mono tabular-nums ${status === "running" ? "text-blue-400/80" : "text-white/25"}`}>
+                  {timing}
+                </span>
+              )}
+              <StatusBadge status={status} />
+            </div>
           </div>
         );
       })}

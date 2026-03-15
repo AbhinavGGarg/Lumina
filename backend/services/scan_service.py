@@ -1,6 +1,7 @@
 """Background scan executor."""
 
 import asyncio
+import time
 
 from ..core.data_models import ScanStatus
 from ..db.scans import scans
@@ -37,6 +38,7 @@ async def run_scan_background(scan_id: str, target: str) -> None:
     """Execute the scan graph in a background thread."""
     state = scans[scan_id]
     state.status = ScanStatus.running
+    state.started_at = time.time()
     state.log.append(f"Scan started for target: {target}")
 
     try:

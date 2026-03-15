@@ -14,13 +14,14 @@ Architecture:
 import json
 import logging
 import re
+import time
 from urllib.parse import urlparse
 
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
 
-from ..core.data_models import Finding, ScanStatus, Severity
+from ..core.data_models import Finding, PortInfo, ScanStatus, Severity
 from ..core.prompts import (
     ATTACK_CHAIN_PROMPT,
     ATTACK_CHAIN_SYSTEM,
@@ -56,6 +57,51 @@ class GraphState(BaseModel):
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
+
+_HIGH_RISK_PORTS  = {3306, 5432, 27017, 6379, 1433, 9200, 5984, 2379, 4444}
+_MEDIUM_RISK_PORTS = {22, 23, 21, 3389, 5900, 5901, 8888, 9090}
+_LOW_RISK_PORTS   = {80, 443, 8080, 8443, 8000, 3000, 4000, 5000}
+
+
+def _parse_nmap_ports(nmap_output: str) -> list[PortInfo]:
+    """Extract open port rows from nmap plain-text output.
+
+    Args:
+        nmap_output: Raw nmap stdout string.
+
+    Returns:
+        List of PortInfo objects for each open port found.
+    """
+    ports: list[PortInfo] = []
+    # Matches lines like: 80/tcp   open  http    Apache httpd 2.4
+    pattern = re.compile(
+        r"^(\d+)/(tcp|udp)\s+open\s+(\S+)?\s*(.*?)\s*$",
+        re.MULTILINE,
+    )
+    for m in pattern.finditer(nmap_output):
+        port_num = int(m.group(1))
+        protocol = m.group(2)
+        service  = (m.group(3) or "").strip("?") or "unknown"
+        version  = m.group(4).strip()
+
+        if port_num in _HIGH_RISK_PORTS:
+            risk = "high"
+        elif port_num in _MEDIUM_RISK_PORTS:
+            risk = "medium"
+        elif port_num in _LOW_RISK_PORTS:
+            risk = "low"
+        else:
+            risk = "info"
+
+        ports.append(PortInfo(
+            port=port_num,
+            protocol=protocol,
+            service=service,
+            version=version[:60],
+            risk=risk,
+        ))
+    return ports
+
 
 def _extract_host(url: str) -> str:
     parsed = urlparse(url)
@@ -118,7 +164,7 @@ def _parse_findings(agent: str, tool: str, llm_response: str) -> list[dict]:
                 "severity":    item.get("severity", "info"),
                 "title":       item.get("title", "Unnamed finding"),
                 "description": item.get("description", ""),
-                "evidence":    item.get("evidence", "")[:300],
+                "evidence":    item.get("evidence", "")[:2000],
                 "remediation": item.get("remediation", ""),
                 "component":   item.get("component", ""),
             }
@@ -151,6 +197,9 @@ def _update_store(
     state = scans[scan_id]
     state.current_agent = agent
     state.log.append(log_msg)
+    # Record the first time this agent runs.
+    if agent not in state.agent_timings:
+        state.agent_timings[agent] = time.time()
     for f in new_findings:
         try:
             state.findings.append(Finding(
@@ -330,9 +379,17 @@ def recon_node(state: GraphState) -> dict:
         return {"findings": state.findings}
 
     findings = _llm_interpret(state.scan_id, "recon", "httpx+nmap+whatweb", combined, state.threat_model)
+
+    # Parse and store open ports from nmap output for the port map visualisation.
+    parsed_ports = _parse_nmap_ports(nmap_result.get("output", ""))
+    if state.scan_id and parsed_ports:
+        from ..db.scans import scans as _scans
+        if state.scan_id in _scans:
+            _scans[state.scan_id].ports = parsed_ports
+
     _update_store(
         state.scan_id, "recon",
-        f"Recon complete -- findings={len(findings)}",
+        f"Recon complete -- findings={len(findings)}, open ports={len(parsed_ports)}",
         findings,
     )
     return {"findings": state.findings + findings}
