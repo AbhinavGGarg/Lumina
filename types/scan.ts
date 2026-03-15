@@ -9,6 +9,28 @@ export interface Finding {
   description: string;
   evidence: string;
   remediation: string;
+  component: string;
+}
+
+export interface ChainNode {
+  id: string;
+  label: string;
+  type: string; // initial_access | credential_access | lateral_movement | exfiltration | impact | service
+  finding_ref: string;
+}
+
+export interface ChainEdge {
+  from_id: string;
+  to_id: string;
+  label: string;
+  justification: string;
+}
+
+export interface AttackChain {
+  nodes: ChainNode[];
+  edges: ChainEdge[];
+  narrative: string;
+  mermaid: string;
 }
 
 export interface ScanState {
@@ -20,6 +42,7 @@ export interface ScanState {
   status: ScanStatus;
   current_agent: string;
   agents_plan: string[];
+  attack_chain: AttackChain;
   findings: Finding[];
   log: string[];
   llm_log: string[];

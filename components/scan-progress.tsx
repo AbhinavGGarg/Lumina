@@ -2,14 +2,18 @@ import { ScanState } from "@/types/scan";
 
 // All possible agent nodes with display metadata.
 const AGENT_META: Record<string, { label: string; icon: string; tools: string }> = {
-  planner:          { label: "Planner",          icon: "🧠", tools: "language detection" },
+  planner:          { label: "Planner",           icon: "🧠", tools: "language detection" },
   recon:            { label: "Recon",             icon: "🌐", tools: "httpx · nmap · whatweb" },
-  sql_injection:    { label: "SQL Injection",     icon: "💉", tools: "sqlmap" },
+  attack_chain:     { label: "Attack Chain",       icon: "⛓️",  tools: "LLM reasoning" },
+  sqli:             { label: "SQL Injection",      icon: "💉", tools: "sqlmap" },
+  sql_injection:    { label: "SQL Injection",      icon: "💉", tools: "sqlmap" },
   xss:              { label: "XSS",               icon: "🎯", tools: "dalfox" },
   static_c:         { label: "C/C++ Analysis",    icon: "🔬", tools: "cppcheck · semgrep p/c" },
+  static:           { label: "Static Analysis",   icon: "🔬", tools: "semgrep · bandit" },
   static_analysis:  { label: "Static Analysis",   icon: "🔬", tools: "semgrep · bandit" },
   deps_py:          { label: "Python Deps",       icon: "📦", tools: "pip-audit" },
   deps_js:          { label: "JS Deps",           icon: "📦", tools: "npm audit" },
+  deps:             { label: "Dependencies",      icon: "📦", tools: "pip-audit · npm audit" },
   dependencies:     { label: "Dependencies",      icon: "📦", tools: "pip-audit · npm audit" },
   secrets:          { label: "Secrets",           icon: "🔐", tools: "trufflehog · detect-secrets" },
   report:           { label: "Report",            icon: "📄", tools: "LLM synthesis" },

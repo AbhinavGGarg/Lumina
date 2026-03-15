@@ -6,7 +6,9 @@ import { ScanState } from "@/types/scan";
 import { ScanProgress } from "@/components/scan-progress";
 import { FindingCard } from "@/components/finding-card";
 import { Button } from "@/components/ui/button";
-import { Terminal, ShieldAlert, Cpu } from "lucide-react";
+import { Terminal, ShieldAlert, Cpu, GitBranch, BarChart3 } from "lucide-react";
+import { AttackChainGraph } from "@/components/attack-chain-graph";
+import { FindingsChart } from "@/components/findings-chart";
 import { ReportModal } from "@/components/report-modal";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -347,6 +349,27 @@ export default function ScanPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* ── Architecture Map + Findings by Component ─────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+          <div className="lg:col-span-7 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
+              <GitBranch className="w-4 h-4 text-white/40" />
+              Attack Chain
+            </div>
+            <AttackChainGraph scan={scan} />
+          </div>
+
+          <div className="lg:col-span-5 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
+              <BarChart3 className="w-4 h-4 text-white/40" />
+              Findings by Component
+            </div>
+            <FindingsChart scan={scan} />
+          </div>
+
         </div>
       </div>
 
