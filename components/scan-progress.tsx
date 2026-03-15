@@ -23,21 +23,49 @@ interface Props {
   scan: ScanState;
 }
 
+function normalizeAgentKey(agentKey: string): string {
+  const aliases: Record<string, string> = {
+    sql_injection: "sqli",
+    static_analysis: "static",
+    dependencies: "deps",
+    complete: "report",
+  };
+
+  return aliases[agentKey] ?? agentKey;
+}
+
 function agentStatus(
   agentKey: string,
   scan: ScanState,
 ): "done" | "running" | "queued" | "skipped" {
+  const normalizedAgent = normalizeAgentKey(agentKey);
+
+  // Planner is a synthetic first step and not part of agents_plan.
+  // Mark it done as soon as planning output is available.
+  if (normalizedAgent === "planner") {
+    if (scan.current_agent === "planner") return "running";
+
+    const planningComplete =
+      Boolean(scan.architecture_summary?.trim()) ||
+      scan.agents_plan.length > 0;
+
+    if (planningComplete) return "done";
+    return "queued";
+  }
+
   // Normalise "complete" marker used by backend when fully done.
-  const current =
-    scan.current_agent === "complete" ? "report" : scan.current_agent;
+  const current = normalizeAgentKey(scan.current_agent);
 
   if (scan.status === "complete") return "done";
-  if (current === agentKey) return "running";
+  if (current === normalizedAgent) return "running";
 
   // Determine ordering from the live plan, falling back to render order.
-  const planOrder = scan.agents_plan.length > 0 ? scan.agents_plan : [];
+  const planOrder =
+    scan.agents_plan.length > 0
+      ? scan.agents_plan.map(normalizeAgentKey)
+      : [];
   const currentIdx = planOrder.indexOf(current);
-  const agentIdx   = planOrder.indexOf(agentKey);
+  const agentIdx   = planOrder.indexOf(normalizedAgent);
 
   if (agentIdx !== -1 && currentIdx !== -1 && agentIdx < currentIdx) return "done";
   return "queued";

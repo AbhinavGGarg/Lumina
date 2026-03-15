@@ -7,12 +7,15 @@ RUN go install github.com/hahwul/dalfox/v2@latest
 FROM python:3.13-slim
 
 # Install only the system dependencies required at runtime
-# (nmap for scanning, git/curl for trufflehog, whatweb natively)
+# (nmap for scanning, git/curl for trufflehog, whatweb, and npm audit support)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap \
     git \
     curl \
+    cppcheck \
     whatweb \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled Go binaries from stage 1

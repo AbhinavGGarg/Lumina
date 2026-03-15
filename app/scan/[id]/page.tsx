@@ -6,6 +6,8 @@ import { ScanState } from "@/types/scan";
 import { ScanProgress } from "@/components/scan-progress";
 import { FindingCard } from "@/components/finding-card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TextAnimate } from "@/components/ui/text-animate";
 import { Terminal, ShieldAlert, Cpu, GitBranch, BarChart3 } from "lucide-react";
 import { AttackChainGraph } from "@/components/attack-chain-graph";
 import { FindingsChart } from "@/components/findings-chart";
@@ -60,7 +62,7 @@ function LlmStreamPanel({ llmLog }: { llmLog: string[] }) {
   const latestBlock = blocks[blocks.length - 1];
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0d0d0d] overflow-hidden flex flex-col h-full min-h-100 max-h-200 shadow-2xl">
+    <div className="rounded-xl border border-white/10 bg-[#0d0d0d] overflow-hidden flex h-full flex-col shadow-2xl">
       {/* Header */}
       <div className="w-full flex items-center justify-between px-5 py-3.5 border-b border-white/5 bg-[#161616]">
         <div className="flex items-center gap-2">
@@ -83,23 +85,26 @@ function LlmStreamPanel({ llmLog }: { llmLog: string[] }) {
       </div>
 
       {/* Stream content */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-5 py-4 scroll-smooth"
-      >
-        {blocks.map((block, bi) => (
-          <div key={bi} className="mb-6">
-            <p className="text-[11px] font-mono text-purple-400 mb-2 uppercase tracking-widest">
-              &gt; [{block.agent}] process
-            </p>
-            <p className="font-mono text-[13px] text-[#c9d1d9] leading-relaxed whitespace-pre-wrap break-all">
-              {block.tokens.join("")}
-              {!block.done && bi === blocks.length - 1 && (
-                <span className="inline-block w-2 h-4 bg-purple-400 ml-1 animate-pulse align-middle" />
-              )}
-            </p>
-          </div>
-        ))}
+      <div className="relative flex-1 min-h-0">
+        <div
+          ref={scrollRef}
+          className="h-full overflow-y-auto px-5 py-4 pb-8 scroll-smooth"
+        >
+          {blocks.map((block, bi) => (
+            <div key={bi} className="mb-6">
+              <p className="text-[11px] font-mono text-purple-400 mb-2 uppercase tracking-widest">
+                &gt; [{block.agent}] process
+              </p>
+              <p className="font-mono text-[13px] text-[#c9d1d9] leading-relaxed whitespace-pre-wrap break-all">
+                {block.tokens.join("")}
+                {!block.done && bi === blocks.length - 1 && (
+                  <span className="inline-block w-2 h-4 bg-purple-400 ml-1 animate-pulse align-middle" />
+                )}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-8 bg-gradient-to-t from-[#0d0d0d] to-transparent" />
       </div>
     </div>
   );
@@ -110,6 +115,11 @@ function LlmStreamPanel({ llmLog }: { llmLog: string[] }) {
 export default function ScanPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const transcriptAutoScrollRef = useRef(true);
+  const transcriptUserInteractedRef = useRef(false);
+  const transcriptProgrammaticScrollRef = useRef(false);
+  const transcriptRafRef = useRef<number | null>(null);
   const [scan, setScan] = useState<ScanState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -119,6 +129,9 @@ export default function ScanPage() {
 
   useEffect(() => {
     if (!id) return;
+
+    transcriptAutoScrollRef.current = true;
+    transcriptUserInteractedRef.current = false;
 
     const es = new EventSource(`${API}/api/scan/${id}/stream`);
 
@@ -141,6 +154,81 @@ export default function ScanPage() {
 
     return () => es.close();
   }, [id]);
+
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (!el || !transcriptAutoScrollRef.current) {
+      return;
+    }
+
+    const startTop = el.scrollTop;
+    const targetTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    const delta = targetTop - startTop;
+
+    if (Math.abs(delta) < 1) {
+      el.scrollTop = targetTop;
+      return;
+    }
+
+    if (transcriptRafRef.current !== null) {
+      cancelAnimationFrame(transcriptRafRef.current);
+      transcriptRafRef.current = null;
+    }
+
+    const durationMs = 280;
+    const startTs = performance.now();
+
+    const tick = (ts: number) => {
+      const elapsed = ts - startTs;
+      const t = Math.min(1, elapsed / durationMs);
+      const eased = 1 - (1 - t) ** 3; // easeOutCubic
+      transcriptProgrammaticScrollRef.current = true;
+      el.scrollTop = startTop + delta * eased;
+      transcriptProgrammaticScrollRef.current = false;
+
+      if (t < 1 && transcriptAutoScrollRef.current) {
+        transcriptRafRef.current = requestAnimationFrame(tick);
+      } else {
+        transcriptRafRef.current = null;
+      }
+    };
+
+    transcriptRafRef.current = requestAnimationFrame(tick);
+  }, [scan?.log.length]);
+
+  useEffect(() => {
+    return () => {
+      if (transcriptRafRef.current !== null) {
+        cancelAnimationFrame(transcriptRafRef.current);
+      }
+    };
+  }, []);
+
+  function handleTranscriptScroll() {
+    if (transcriptProgrammaticScrollRef.current) {
+      return;
+    }
+
+    if (!transcriptUserInteractedRef.current) {
+      return;
+    }
+
+    const el = transcriptRef.current;
+    if (!el) {
+      return;
+    }
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    transcriptAutoScrollRef.current = distanceFromBottom < 48;
+
+    if (!transcriptAutoScrollRef.current && transcriptRafRef.current !== null) {
+      cancelAnimationFrame(transcriptRafRef.current);
+      transcriptRafRef.current = null;
+    }
+  }
+
+  function handleTranscriptUserIntent() {
+    transcriptUserInteractedRef.current = true;
+  }
 
   async function openReportModal() {
     if (!id) return;
@@ -208,10 +296,17 @@ export default function ScanPage() {
   );
 
   const isRunning = scan.status === "running" || scan.status === "pending";
+  const architecture = scan.architecture_summary?.trim() ?? "";
+  const showArchitectureSkeleton = isRunning && !architecture;
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-white flex flex-col px-6 md:px-12 xl:px-24 pt-8 pb-16 font-sans">
-      <div className="w-full max-w-350 mx-auto flex flex-col gap-8">
+    <main className="relative page-shell min-h-screen overflow-hidden bg-[#0a0a0a] text-white flex flex-col pt-8 pb-16 font-sans">
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-[radial-gradient(900px_460px_at_12%_0%,rgba(168,85,247,0.08),transparent_60%),radial-gradient(800px_420px_at_88%_0%,rgba(59,130,246,0.07),transparent_60%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0a0a0a]/20 to-[#0a0a0a]/55" />
+      </div>
+
+      <div className="relative z-10 page-container flex flex-col gap-8">
         {/* Header Console */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 rounded-2xl border border-white/10 bg-[#111] shadow-2xl relative overflow-hidden">
           {/* Subtle bg glow */}
@@ -220,7 +315,7 @@ export default function ScanPage() {
           <div className="flex flex-col items-start gap-2 z-10">
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-serif font-medium tracking-tight">
-                {isRunning ? "Active Operation" : "Operation Complete"}
+                {isRunning ? "Active Operation" : "Operation Summary"}
               </h1>
               <StatusBadge status={scan.status} />
             </div>
@@ -229,28 +324,49 @@ export default function ScanPage() {
               <span className="font-mono text-sm text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">
                 {scan.target}
               </span>
-              {scan.architecture_summary && (
-                <div className="flex items-start gap-1.5 text-sm text-white/40">
-                  <span className="shrink-0 mt-px">Architecture:</span>
-                  <span className="font-mono text-sm text-white/70 bg-white/5 px-1.5 py-px rounded border border-white/10 leading-relaxed">
-                    {scan.architecture_summary}
-                  </span>
+            </div>
+
+            <div className="mt-3 w-full border-t border-white/10 pt-3">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-white/45">
+                Architecture
+              </div>
+
+              {showArchitectureSkeleton ? (
+                <div className="mt-2 space-y-2">
+                  <Skeleton className="h-3 w-48 bg-white/10" />
+                  <Skeleton className="h-3 w-full bg-white/10" />
+                  <Skeleton className="h-3 w-4/5 bg-white/10" />
                 </div>
+              ) : architecture ? (
+                <TextAnimate
+                  animation="blurInUp"
+                  by="character"
+                  once
+                  duration={1.2}
+                  delay={0.15}
+                  className="mt-2 block text-sm leading-relaxed text-white/75"
+                >
+                  {architecture}
+                </TextAnimate>
+              ) : (
+                <p className="mt-2 text-sm text-white/35">
+                  Architecture analysis unavailable.
+                </p>
               )}
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto z-10">
+          <div className="flex items-center gap-3 w-full md:w-auto md:self-start z-10">
             <Button
               variant="outline"
               onClick={() => router.push("/")}
-              className="bg-[#1a1a1a] hover:bg-[#2a2a2a] border-white/10 text-white w-full md:w-auto"
+              className="bg-[#1a1a1a] hover:bg-[#2a2a2a] border-white/10 text-white md:min-w-32.5"
             >
               + New Target
             </Button>
             {scan.status === "complete" && (
               <Button
-                className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20 w-full md:w-auto"
+                className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20 md:min-w-37.5"
                 onClick={openReportModal}
               >
                 Detailed Report →
@@ -262,10 +378,10 @@ export default function ScanPage() {
         {/* 3-Column SaaS Dashboard Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Column 1: Pipeline & Status (Col Span 3) */}
-          <div className="flex flex-col gap-6 lg:col-span-3">
+          <div className="flex flex-col gap-6 lg:col-span-3 lg:h-[42rem] lg:self-stretch lg:overflow-hidden">
             {/* Severity Summary */}
             {scan.findings.length > 0 && (
-              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg">
+              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg shrink-0">
                 <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest">
                   <ShieldAlert className="w-4 h-4 text-white/40" />
                   Threat Overview
@@ -278,95 +394,157 @@ export default function ScanPage() {
               </div>
             )}
 
-            <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-4 shadow-lg">
+            <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-4 shadow-lg shrink-0 lg:h-[20rem] overflow-hidden">
               <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest">
                 <Cpu className="w-4 h-4 text-white/40" />
                 Execution Pipeline
               </div>
-              <ScanProgress scan={scan} />
+              <div className="relative flex-1 min-h-0">
+                <div className="h-full overflow-y-auto pb-5">
+                  <ScanProgress scan={scan} />
+                </div>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-7 bg-gradient-to-t from-[#111] to-transparent" />
+              </div>
             </div>
 
             {/* System Log */}
             {scan.log.length > 0 && (
-              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg">
-                <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest">
+              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg lg:flex-1 lg:min-h-0 overflow-hidden">
+                <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest shrink-0">
                   System Transcript
                 </h3>
-                <div className="text-[11px] text-white/40 font-mono flex flex-col gap-1.5 max-h-60 overflow-y-auto pr-2">
-                  {scan.log.map((entry, i) => (
-                    <span
-                      key={i}
-                      className={
-                        entry.startsWith("[SKIP]")
-                          ? "text-yellow-500/60"
-                          : undefined
-                      }
-                    >
-                      {entry}
-                    </span>
-                  ))}
+                <div className="relative lg:flex-1 lg:min-h-0">
+                  <div
+                    ref={transcriptRef}
+                    onScroll={handleTranscriptScroll}
+                    onWheel={handleTranscriptUserIntent}
+                    onTouchMove={handleTranscriptUserIntent}
+                    onPointerDown={handleTranscriptUserIntent}
+                    className="h-full text-[11px] text-white/40 font-mono flex flex-col gap-1.5 overflow-y-auto pr-2 pb-5"
+                  >
+                    {scan.log.map((entry, i) => (
+                      <span
+                        key={i}
+                        className={
+                          entry.startsWith("[SKIP]")
+                            ? "text-yellow-500/60"
+                            : undefined
+                        }
+                      >
+                        {entry}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-7 bg-gradient-to-t from-[#111] to-transparent" />
                 </div>
               </div>
             )}
           </div>
 
           {/* Column 2: Agent Reasoning Engine (Col Span 5 or 6) */}
-          <div className="lg:col-span-5 h-150 lg:h-auto lg:self-stretch">
+          <div className="lg:col-span-5 h-[34rem] lg:h-[42rem] lg:self-stretch">
             {scan.llm_log.length > 0 ? (
               <LlmStreamPanel llmLog={scan.llm_log} />
             ) : (
-              <div className="h-full rounded-xl border border-white/5 border-dashed flex items-center justify-center p-8 bg-[#111]/50 text-center">
-                <p className="text-sm font-mono text-white/30 tracking-tight">
-                  Awaiting LLM interpretation stream...
-                </p>
+              <div className="h-full rounded-xl border border-white/5 border-dashed p-6 bg-[#111]/50">
+                <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-white/35">
+                  <span className="h-2 w-2 rounded-full bg-purple-400/70 animate-pulse" />
+                  LLM interpretation warming up
+                </div>
+                <div className="mt-4 space-y-5">
+                  {[0, 1, 2].map((row) => (
+                    <div key={row} className="space-y-2">
+                      <Skeleton className="h-2.5 w-32 bg-white/10" />
+                      <Skeleton className="h-2.5 w-full bg-white/10" />
+                      <Skeleton className="h-2.5 w-11/12 bg-white/10" />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
           {/* Column 3: Findings (Col Span 4 or 3) */}
-          <div className="flex flex-col gap-4 lg:col-span-4 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg h-150 lg:h-auto lg:self-stretch overflow-y-auto">
-            <h2 className="text-xs font-semibold text-white/50 uppercase tracking-widest flex items-center justify-between sticky top-0 bg-[#111] z-10 pb-2 mb-2 border-b border-white/5 w-full">
+          <div className="flex flex-col gap-4 lg:col-span-4 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg h-[34rem] lg:h-[42rem] lg:self-stretch overflow-hidden">
+            <h2 className="text-xs font-semibold text-white/50 uppercase tracking-widest flex items-center justify-between shrink-0 pb-2 mb-2 border-b border-white/5 w-full">
               <span>Discovered Vulnerabilities</span>
               <span className="bg-white/10 text-white/80 px-2 py-0.5 rounded-full">
                 {scan.findings.length}
               </span>
             </h2>
 
-            <div className="flex flex-col gap-3">
-              {sortedFindings.length === 0 ? (
-                <p className="text-sm text-white/30 text-center py-12">
-                  {scan.status === "running"
-                    ? "Scanning engines active..."
-                    : "No vulnerabilities detected based on current rulesets."}
-                </p>
-              ) : (
-                sortedFindings.map((f, i) => (
-                  <FindingCard key={i} finding={f} index={i} />
-                ))
-              )}
+            <div className="relative flex-1 min-h-0">
+              <div className="h-full overflow-y-auto pr-1 pb-5">
+                <div className="flex flex-col gap-3">
+                  {sortedFindings.length === 0 ? (
+                    scan.status === "running" ? (
+                      <div className="py-2 space-y-3">
+                        <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-white/35">
+                          <span className="h-2 w-2 rounded-full bg-emerald-400/70 animate-pulse" />
+                          Scanning engines active
+                        </div>
+                        {[0, 1, 2].map((i) => (
+                          <div
+                            key={i}
+                            className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <Skeleton className="h-3 w-24 bg-white/10" />
+                              <Skeleton className="h-3 w-12 bg-white/10" />
+                            </div>
+                            <Skeleton className="h-3 w-full bg-white/10" />
+                            <Skeleton className="h-3 w-4/5 bg-white/10" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-white/30 text-center py-12">
+                        No vulnerabilities detected based on current rulesets.
+                      </p>
+                    )
+                  ) : (
+                    sortedFindings.map((f, i) => (
+                      <FindingCard key={i} finding={f} index={i} />
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-7 bg-gradient-to-t from-[#111] to-transparent" />
             </div>
           </div>
         </div>
 
         {/* ── Architecture Map + Findings by Component ─────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-
-          <div className="lg:col-span-7 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
-            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start lg:items-stretch">
+          <div className="lg:col-span-7 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg flex flex-col lg:h-[24rem] overflow-hidden">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4 shrink-0">
               <GitBranch className="w-4 h-4 text-white/40" />
               Attack Chain
             </div>
-            <AttackChainGraph scan={scan} />
+            <div className="relative flex-1 min-h-0">
+              <div className="h-full overflow-auto pr-1 pb-4">
+                <div className="min-h-full w-full">
+                  <AttackChainGraph scan={scan} />
+                </div>
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-6 bg-gradient-to-t from-[#111] to-transparent" />
+            </div>
           </div>
 
-          <div className="lg:col-span-5 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
-            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
+          <div className="lg:col-span-5 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg flex flex-col lg:h-[24rem] overflow-hidden">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4 shrink-0">
               <BarChart3 className="w-4 h-4 text-white/40" />
               Findings by Component
             </div>
-            <FindingsChart scan={scan} />
+            <div className="relative flex-1 min-h-0">
+              <div className="h-full overflow-auto pr-1 pb-4">
+                <div className="min-h-full w-full">
+                  <FindingsChart scan={scan} />
+                </div>
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-6 bg-gradient-to-t from-[#111] to-transparent" />
+            </div>
           </div>
-
         </div>
       </div>
 

@@ -7,17 +7,28 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
-from ..core.constants import ALLOWED_TARGETS
+from ..core.constants import ALLOWED_TARGETS, REPO_CLONE_ROOT
 from ..core.data_models import ScanRequest, ScanResponse, ScanState, ScanStatus
 from ..db.scans import scans
+from ..services.repo_ingest_service import is_github_repo_url
 from ..services.scan_service import run_scan_background
 
 router = APIRouter(prefix="/api", tags=["scans"])
 
 
 def _validate_target(target: str) -> None:
-    if target.startswith("/repos/") or target.startswith("/tmp/"):
+    clone_root = str(REPO_CLONE_ROOT)
+
+    if is_github_repo_url(target):
         return
+
+    if (
+        target.startswith("/repos/")
+        or target.startswith("/tmp/")
+        or target.startswith(f"{clone_root}/")
+    ):
+        return
+
     host = urlparse(target).hostname or ""
     if not host:
         raise HTTPException(status_code=400, detail="Could not parse target host")

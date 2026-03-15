@@ -244,53 +244,62 @@ export default function ReportPage() {
   }
 
   return (
-    <main className="min-h-screen">
+    <main className="relative min-h-screen overflow-hidden bg-[#0a0a0a] text-white">
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-[radial-gradient(760px_420px_at_10%_0%,rgba(168,85,247,0.08),transparent_60%),radial-gradient(680px_360px_at_90%_0%,rgba(59,130,246,0.06),transparent_60%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0a0a0a]/15 to-[#0a0a0a]/45" />
+      </div>
+
       {/* Sticky top bar */}
-      <div className="sticky top-0 z-10 border-b border-border/60 bg-background/90 backdrop-blur-sm">
-        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-sm font-semibold shrink-0">Pulse</span>
-            <span className="text-border/60 shrink-0">|</span>
-            <span className="text-xs text-muted-foreground font-mono truncate">{target}</span>
-          </div>
-          <div className="flex gap-2 shrink-0">
-            <Button variant="outline" size="sm" onClick={downloadReport}>
-              ↓ Export
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => router.push(`/scan/${id}`)}>
-              ← Scan
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => router.push("/")}>
-              New Scan
-            </Button>
+      <div className="sticky top-0 z-20 border-b border-white/10 bg-[#101010]/85 backdrop-blur-sm">
+        <div className="page-shell">
+          <div className="page-container flex h-14 items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-sm font-semibold shrink-0">Pulse</span>
+              <span className="text-border/60 shrink-0">|</span>
+              <span className="text-xs text-muted-foreground font-mono truncate">{target}</span>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button variant="outline" size="sm" onClick={downloadReport}>
+                ↓ Export
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => router.push(`/scan/${id}`)}>
+                ← Scan
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => router.push("/")}>
+                New Scan
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Body */}
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        {/* Meta banner */}
-        <div className="flex flex-wrap gap-x-8 gap-y-2 mb-10 px-5 py-3.5 rounded-xl border border-border bg-muted/30 text-xs font-mono">
-          <span className="text-muted-foreground">
-            <span className="text-foreground font-semibold mr-1.5">Target</span>{target}
-          </span>
-          <span className="text-muted-foreground">
-            <span className="text-foreground font-semibold mr-1.5">Scan ID</span>{id?.slice(0, 8)}
-          </span>
-          {scanDate && (
+      <div className="relative z-10 page-shell py-12">
+        <div className="page-container">
+          {/* Meta banner */}
+          <div className="flex flex-wrap gap-x-8 gap-y-2 mb-10 px-5 py-3.5 rounded-xl border border-border bg-muted/30 text-xs font-mono">
             <span className="text-muted-foreground">
-              <span className="text-foreground font-semibold mr-1.5">Date</span>{scanDate}
+              <span className="text-foreground font-semibold mr-1.5">Target</span>{target}
             </span>
-          )}
-          <span className="text-muted-foreground">
-            <span className="text-foreground font-semibold mr-1.5">Tool</span>Pulse Pentest v0.1
-          </span>
-        </div>
+            <span className="text-muted-foreground">
+              <span className="text-foreground font-semibold mr-1.5">Scan ID</span>{id?.slice(0, 8)}
+            </span>
+            {scanDate && (
+              <span className="text-muted-foreground">
+                <span className="text-foreground font-semibold mr-1.5">Date</span>{scanDate}
+              </span>
+            )}
+            <span className="text-muted-foreground">
+              <span className="text-foreground font-semibold mr-1.5">Tool</span>Pulse Pentest v0.1
+            </span>
+          </div>
 
-        {/* Rendered markdown */}
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-          {report}
-        </ReactMarkdown>
+          {/* Rendered markdown */}
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+            {report}
+          </ReactMarkdown>
+        </div>
       </div>
     </main>
   );
