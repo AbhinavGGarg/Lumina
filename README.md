@@ -82,6 +82,17 @@ Because the backend runs inside Docker's network, use the container alias rather
 http://host.docker.internal:3001
 ```
 
+**Public GitHub repository:**
+Submit a repository root URL directly:
+
+```
+https://github.com/owner/repository
+```
+
+Pulse clones the repository inside the backend container runtime (named Docker
+volume mounted at `/var/pulse/repos`) and scans that snapshot. Nothing is
+cloned into your local workspace.
+
 **Local repository:**
 Mount the repo into `/tmp` on your host and submit the container-side path:
 

@@ -10,6 +10,7 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const EXAMPLE_TARGETS = [
   "http://target:3000",
   "http://localhost:3001",
+  "https://github.com/vercel/next.js",
 ];
 
 export function ScanForm() {
@@ -20,7 +21,7 @@ export function ScanForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!target.trim()) {
-      toast.error("Please enter a target URL or repository path");
+      toast.error("Please enter a URL, GitHub repository, or repo path");
       return;
     }
     setLoading(true);
@@ -54,13 +55,13 @@ export function ScanForm() {
           type="text"
           value={target}
           onChange={(e) => setTarget(e.target.value)}
-          placeholder="http://target:3000   or   /repos/my-app"
+          placeholder="http://target:3000   or   https://github.com/owner/repo"
           className="flex-1 bg-transparent border-none text-white px-2 py-4 outline-none placeholder:text-white/20 font-mono text-sm"
         />
         <div className="pr-2">
-          <Button 
-            type="submit" 
-            disabled={loading} 
+          <Button
+            type="submit"
+            disabled={loading}
             className="bg-white text-black hover:bg-white/90 font-medium px-6 py-5 rounded-lg h-auto"
           >
             {loading ? "Initializing..." : "Run Autopilot"}

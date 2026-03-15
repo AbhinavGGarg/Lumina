@@ -36,6 +36,8 @@ export interface AttackChain {
 export interface ScanState {
   scan_id: string;
   target: string;
+  resolved_target: string;
+  source_repo_url: string;
   target_type: string;
   architecture_summary: string;
   threat_model: string;

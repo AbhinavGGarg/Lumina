@@ -9,7 +9,6 @@ export default function Home() {
     <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col font-sans selection:bg-purple-500/30">
       <main className="flex-1 flex flex-col px-6 md:px-12 xl:px-24 pt-32 pb-16 justify-center">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-8 max-w-7xl mx-auto w-full">
-          
           {/* Left Hero Section */}
           <div className="flex flex-col gap-6 items-start text-left">
             <motion.h1
@@ -36,8 +35,11 @@ export default function Home() {
               transition={{ duration: 0.4, delay: 0.2 }}
               className="text-sm md:text-base text-white/50 max-w-lg leading-relaxed font-light mt-2"
             >
-              Pulse is a LangGraph orchestrated security system. We dispatch specialised agents running{" "}
-              <span className="text-white/80 font-medium tracking-wide">httpx, nmap, sqlmap, dalfox, and semgrep</span>{" "}
+              Pulse is a LangGraph orchestrated security system. We dispatch
+              specialised agents running{" "}
+              <span className="text-white/80 font-medium tracking-wide">
+                httpx, nmap, sqlmap, dalfox, and semgrep
+              </span>{" "}
               to discover flaws in your infrastructure and codebase.
             </motion.p>
 
@@ -52,7 +54,8 @@ export default function Home() {
               </div>
               <p className="text-[10px] text-white/30 tracking-tight mt-4 ml-2 flex items-center gap-1.5">
                 <Lock className="w-3 h-3" />
-                Scanning restricted to allowlisted targets: target · localhost · 127.0.0.1
+                Web scans use allowlisted hosts. Public GitHub repos are
+                imported in backend-isolated storage.
               </p>
             </motion.div>
           </div>
@@ -84,22 +87,34 @@ export default function Home() {
                   <span>&gt; target: harris-corporation</span>
                   <span className="text-white/30">12ms</span>
                 </div>
-                
+
                 <div className="space-y-1">
-                  <p className="text-white/40">✓ [planner] Analysing target...</p>
-                  <p className="text-emerald-400">  → Type: repository</p>
-                  <p className="text-emerald-400">  → Languages: Python, Go</p>
-                  <p className="text-emerald-400">  → Plan: [static_py, static_go, secrets, report]</p>
+                  <p className="text-white/40">
+                    ✓ [planner] Analysing target...
+                  </p>
+                  <p className="text-emerald-400"> → Type: repository</p>
+                  <p className="text-emerald-400"> → Languages: Python, Go</p>
+                  <p className="text-emerald-400">
+                    {" "}
+                    → Plan: [static_py, static_go, secrets, report]
+                  </p>
                 </div>
 
                 <div className="space-y-1 mt-2">
-                  <p className="text-white/40">✓ [static_py] Running bandit...</p>
-                  <p className="text-white/70">  → Discovered 2 high-severity hints</p>
+                  <p className="text-white/40">
+                    ✓ [static_py] Running bandit...
+                  </p>
+                  <p className="text-white/70">
+                    {" "}
+                    → Discovered 2 high-severity hints
+                  </p>
                 </div>
 
                 <div className="space-y-1 mt-2">
-                  <p className="text-white/40">✓ [static_go] Running gosec...</p>
-                  <p className="text-white/70">  → Clean</p>
+                  <p className="text-white/40">
+                    ✓ [static_go] Running gosec...
+                  </p>
+                  <p className="text-white/70"> → Clean</p>
                 </div>
 
                 <div className="space-y-1 mt-2">
@@ -107,8 +122,14 @@ export default function Home() {
                     <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
                     [secrets] Scanning for hardcoded credentials
                   </p>
-                  <p className="text-white/30 pl-3.5">  → trufflehog running...</p>
-                  <p className="text-white/30 pl-3.5">  → parsing chunks (450/1202)</p>
+                  <p className="text-white/30 pl-3.5">
+                    {" "}
+                    → trufflehog running...
+                  </p>
+                  <p className="text-white/30 pl-3.5">
+                    {" "}
+                    → parsing chunks (450/1202)
+                  </p>
                 </div>
 
                 <div className="mt-auto pt-6 border-t border-white/5">
@@ -130,7 +151,9 @@ export default function Home() {
             Orchestrating standard tooling
           </span>
           <div className="flex flex-wrap items-center justify-center md:justify-start gap-8 opacity-40 grayscale">
-            <span className="text-sm font-semibold tracking-tight">ProjectDiscovery</span>
+            <span className="text-sm font-semibold tracking-tight">
+              ProjectDiscovery
+            </span>
             <span className="text-sm font-bold tracking-tight">Semgrep</span>
             <span className="text-sm font-medium tracking-wide">NMAP</span>
             <span className="text-sm font-serif italic">sqlmap</span>
