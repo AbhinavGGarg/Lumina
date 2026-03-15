@@ -33,6 +33,14 @@ export interface AttackChain {
   mermaid: string;
 }
 
+export interface PortInfo {
+  port: number;
+  protocol: string;
+  service: string;
+  version: string;
+  risk: "info" | "low" | "medium" | "high";
+}
+
 export interface ScanState {
   scan_id: string;
   target: string;
@@ -44,6 +52,9 @@ export interface ScanState {
   agents_plan: string[];
   attack_chain: AttackChain;
   findings: Finding[];
+  ports: PortInfo[];
+  started_at: number;
+  agent_timings: Record<string, number>;
   log: string[];
   llm_log: string[];
   report: string;

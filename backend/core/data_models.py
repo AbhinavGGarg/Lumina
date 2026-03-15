@@ -52,6 +52,14 @@ class AttackChain(BaseModel):
     mermaid:   str = ""   # Mermaid flowchart LR diagram source
 
 
+class PortInfo(BaseModel):
+    port:     int
+    protocol: str = "tcp"
+    service:  str = ""
+    version:  str = ""
+    risk:     str = "info"  # info | low | medium | high
+
+
 class ScanState(BaseModel):
     scan_id:              str
     target:               str
@@ -63,6 +71,9 @@ class ScanState(BaseModel):
     agents_plan:          list[str] = []
     attack_chain:         AttackChain = AttackChain()
     findings:             list[Finding] = []
+    ports:                list[PortInfo] = []
+    started_at:           float = 0.0        # Unix timestamp when scan began
+    agent_timings:        dict[str, float] = {}  # agent → Unix timestamp when it started
     log:                  list[str] = []
     # Raw LLM token stream -- each entry is one token or a control sentinel.
     # Sentinels: "\x00START:<agent>" opens a block, "\x00END" closes it.

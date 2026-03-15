@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ScanState } from "@/types/scan";
+import { Finding, ScanState } from "@/types/scan";
 import { ScanProgress } from "@/components/scan-progress";
 import { FindingCard } from "@/components/finding-card";
+import { EvidenceDrawer } from "@/components/evidence-drawer";
+import { NmapPortMap } from "@/components/nmap-port-map";
 import { Button } from "@/components/ui/button";
-import { Terminal, ShieldAlert, Cpu, GitBranch, BarChart3 } from "lucide-react";
+import { Terminal, ShieldAlert, Cpu, GitBranch, BarChart3, Radar, Clock } from "lucide-react";
 import { AttackChainGraph } from "@/components/attack-chain-graph";
 import { FindingsChart } from "@/components/findings-chart";
 import { ReportModal } from "@/components/report-modal";
@@ -116,6 +118,8 @@ export default function ScanPage() {
   const [reportMarkdown, setReportMarkdown] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  const [now, setNow] = useState(() => Date.now() / 1000);
 
   useEffect(() => {
     if (!id) return;
@@ -141,6 +145,12 @@ export default function ScanPage() {
 
     return () => es.close();
   }, [id]);
+
+  // Tick every second to drive elapsed timer and per-agent durations.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now() / 1000), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   async function openReportModal() {
     if (!id) return;
@@ -218,11 +228,20 @@ export default function ScanPage() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/5 blur-[100px] pointer-events-none rounded-full" />
 
           <div className="flex flex-col items-start gap-2 z-10">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-3xl font-serif font-medium tracking-tight">
                 {isRunning ? "Active Operation" : "Operation Complete"}
               </h1>
               <StatusBadge status={scan.status} />
+              {scan.started_at > 0 && (
+                <span className="flex items-center gap-1.5 text-xs font-mono text-white/40 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+                  <Clock className="w-3 h-3" />
+                  {(() => {
+                    const s = Math.max(0, Math.floor(now - scan.started_at));
+                    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+                  })()}
+                </span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mt-1">
@@ -286,7 +305,7 @@ export default function ScanPage() {
                 <Cpu className="w-4 h-4 text-white/40" />
                 Execution Pipeline
               </div>
-              <ScanProgress scan={scan} />
+              <ScanProgress scan={scan} now={now} />
             </div>
 
             {/* System Log */}
@@ -344,23 +363,15 @@ export default function ScanPage() {
                 </p>
               ) : (
                 sortedFindings.map((f, i) => (
-                  <FindingCard key={i} finding={f} index={i} />
+                  <FindingCard key={i} finding={f} index={i} onClick={setSelectedFinding} />
                 ))
               )}
             </div>
           </div>
         </div>
 
-        {/* ── Architecture Map + Findings by Component ─────────────────────── */}
+        {/* ── Findings by Component + Open Ports ───────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-
-          <div className="lg:col-span-7 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
-            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
-              <GitBranch className="w-4 h-4 text-white/40" />
-              Attack Chain
-            </div>
-            <AttackChainGraph scan={scan} />
-          </div>
 
           <div className="lg:col-span-5 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
             <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
@@ -370,6 +381,30 @@ export default function ScanPage() {
             <FindingsChart scan={scan} />
           </div>
 
+          {(scan.ports?.length > 0 || scan.status === "running") && (
+            <div className="lg:col-span-7 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
+              <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
+                <Radar className="w-4 h-4 text-white/40" />
+                Open Ports
+                {scan.ports?.length > 0 && (
+                  <span className="ml-auto bg-white/10 text-white/60 px-2 py-0.5 rounded-full text-[10px]">
+                    {scan.ports.length} port{scan.ports.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+              <NmapPortMap scan={scan} />
+            </div>
+          )}
+
+        </div>
+
+        {/* ── Attack Chain ──────────────────────────────────────────────────── */}
+        <div className="bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
+          <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
+            <GitBranch className="w-4 h-4 text-white/40" />
+            Attack Chain
+          </div>
+          <AttackChainGraph scan={scan} />
         </div>
       </div>
 
@@ -382,6 +417,11 @@ export default function ScanPage() {
         target={scan.target}
         scanId={scan.scan_id}
         onDownload={downloadReport}
+      />
+
+      <EvidenceDrawer
+        finding={selectedFinding}
+        onClose={() => setSelectedFinding(null)}
       />
     </main>
   );
