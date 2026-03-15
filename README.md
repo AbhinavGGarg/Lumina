@@ -1,52 +1,117 @@
-# Pulse - Autonomous Penetration Testing Agent
+# Pulse — Autonomous Penetration Testing Platform
 
-Pulse is an intelligent, agent-driven penetration testing platform built with Next.js, FastAPI, and LangGraph. It automatically fingerprints repositories or web targets, dynamically selects the appropriate suite of security tools, and uses LLMs to interpret the raw output to generate actionable vulnerability reports.
+Pulse is an AI-orchestrated penetration testing platform that combines a LangGraph state machine, industry-standard security tooling, and LLM interpretation into a single automated pipeline. Point it at a web target or a local repository and it will fingerprint the stack, dynamically select the relevant scanners, interpret raw tool output with an LLM, build an attack chain graph, and deliver a structured vulnerability report — all streamed live to the UI.
+
+## How it works
+
+A **planner node** inspects the target first:
+
+- **URL targets** — runs a fixed network pipeline: recon → SQL injection → XSS → dependency audit → secrets → attack chain → report.
+- **Repository targets** — walks the file tree, builds a fingerprint, and asks the LLM to choose only the relevant agents from: `static_c`, `static`, `deps_py`, `deps_js`, `secrets`.
+
+Each selected **agent node** runs its toolset, skips the LLM call if the tools fail to produce output, and accumulates structured findings into shared graph state. After all scan agents complete, an **attack chain node** reasons over the combined findings to produce a causal MITRE-aligned exploit graph. A final **report node** synthesises everything into a Markdown vulnerability report.
+
+LLM token streaming is pushed to the frontend in real time via SSE throughout every node.
+
+## Agent pipeline
+
+| Agent                 | Tools                        | Target type            |
+| --------------------- | ---------------------------- | ---------------------- |
+| Planner               | LLM + file-tree fingerprint  | both                   |
+| Recon                 | httpx · nmap · whatweb       | URL                    |
+| SQL Injection         | sqlmap                       | URL                    |
+| XSS                   | dalfox                       | URL                    |
+| C/C++ Static Analysis | cppcheck · semgrep p/c       | repo                   |
+| Static Analysis       | semgrep · bandit             | repo                   |
+| Python Deps           | pip-audit                    | repo                   |
+| JS Deps               | npm audit                    | repo                   |
+| Dependencies          | pip-audit · npm audit        | URL (via /repos mount) |
+| Secrets               | trufflehog · detect-secrets  | both                   |
+| Attack Chain          | LLM reasoning (MITRE ATT&CK) | both                   |
+| Report                | LLM synthesis                | both                   |
+
+## LLM providers
+
+Set `LLM_PROVIDER` in your environment to switch backends:
+
+| Provider           | Env var           | Default model       |
+| ------------------ | ----------------- | ------------------- |
+| `ollama` (default) | `OLLAMA_MODEL`    | `llama3.1:8b`       |
+| `openai`           | `OPENAI_MODEL`    | `gpt-4o`            |
+| `claude`           | `ANTHROPIC_MODEL` | `claude-sonnet-4-6` |
 
 ## Prerequisites
 
-- **Docker & Docker Compose** (Required for the backend to run security tools like `nmap`, `sqlmap`, `trufflehog`, etc.)
-- **pnpm** (Required to run the frontend natively)
-- **Ollama** (Required locally for the LLM inference. MacOS users must run `launchctl setenv OLLAMA_HOST "0.0.0.0"` before starting Ollama to allow Docker to connect).
+- **Docker & Docker Compose** — runs the backend and all security binaries inside Linux containers
+- **pnpm** — runs the Next.js frontend natively
+- **Ollama** (if using the default local LLM) — must be running on your host machine. On macOS, run `launchctl setenv OLLAMA_HOST "0.0.0.0"` before starting Ollama so the backend container can reach it via `host.docker.internal`.
 
-## Quick Start (Development)
+## Quick start (development)
 
-The backend relies on numerous Linux-based security binaries (Go tools, Ruby scripts, C packages). To ensure everything runs smoothly without contaminating your local machine, the backend runs entirely inside Docker, while you run the frontend natively for fast hot-reloading.
+The development setup runs the backend inside Docker (for the security tools) and the frontend natively (for fast hot-reload). Your local Ollama instance is used for LLM inference.
 
-### 1. Start the Backend & Target Sandbox
-Run this command from the root of the project to spin up the FastAPI backend and a local vulnerable target (OWASP Juice Shop) for testing:
+### 1. Start the backend and test target
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d --build
 ```
-*The backend will be available at `http://localhost:8000`*
 
-### 2. Start the Frontend
-Run this natively on your machine:
+- Backend API: `http://localhost:8000`
+- OWASP Juice Shop test target: `http://localhost:3001`
+
+The backend volume-mounts `./backend` so Python code changes hot-reload without a rebuild. If you change environment variables, prompts, or the Dockerfile, restart the container:
+
+```bash
+docker restart pulse-dev-backend
+```
+
+### 2. Start the frontend
+
 ```bash
 pnpm install
 pnpm dev
 ```
-*The frontend will be available at `http://localhost:3000`*
 
-## Docker Commands Cheat Sheet
+Frontend: `http://localhost:3000`
 
-If you modify the Python backend codebase, the changes will hot-reload automatically inside the container. 
+## Scanning targets
 
-However, if you need to manually interact with the Dockerized backend, use these commands:
+**Web target (Juice Shop):**
+Because the backend runs inside Docker's network, use the container alias rather than `localhost`:
+
+```
+http://host.docker.internal:3001
+```
+
+**Local repository:**
+Mount the repo into `/tmp` on your host and submit the container-side path:
 
 ```bash
-# View backend live logs (press Ctrl+C to exit)
+cp -r /path/to/your/repo /tmp/myrepo
+# Submit: /tmp/myrepo
+```
+
+The dev compose file mounts `/tmp` and `/Users` read-only into the backend container.
+
+## Useful Docker commands
+
+```bash
+# Stream backend logs
 docker logs pulse-dev-backend -f
 
-# Restart the backend container (if you change environment variables or prompts)
+# Restart backend (after env/prompt changes)
 docker restart pulse-dev-backend
 
-# Stop all containers when you are done working
+# Stop everything
 docker compose -f docker-compose.dev.yml down
 ```
 
-## Running Scans Locally
+## Full stack (all-in-Docker, including Ollama and frontend)
 
-Since the backend runs inside a Docker virtual network, when you want to scan the local OWASP target container, you must use the `host.docker.internal` or container name alias in the UI:
+For a fully containerised deployment (no local dependencies):
 
-- **Target URL:** `http://pulse-dev-target:3001` or `http://host.docker.internal:3001`
+```bash
+docker compose up -d --build
+```
+
+This spins up Ollama, the backend, the Next.js frontend, and Juice Shop all within a shared Docker network.
