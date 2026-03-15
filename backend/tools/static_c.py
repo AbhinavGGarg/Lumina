@@ -51,7 +51,7 @@ def run_cppcheck(repo_path: str) -> dict:
         return {
             "results": [], "total": 0,
             "error": (
-                "cppcheck not found -- install via: brew install cppcheck"
+                "cppcheck not found -- install via system package manager (Debian/Ubuntu: apt-get install -y cppcheck)"
             ),
         }
     except subprocess.TimeoutExpired:
