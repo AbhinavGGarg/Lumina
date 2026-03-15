@@ -531,9 +531,10 @@ class ScanPlan:
         self.architecture_summary = architecture_summary
         self.threat_model = threat_model
 
-        # Ensure report is always the last agent
-        if "report" not in agents:
-            agents.append("report")
+        # Ensure attack_chain and report are always present, in that order, at the end.
+        agents = [a for a in agents if a not in ("attack_chain", "report")]
+        agents.append("attack_chain")
+        agents.append("report")
         self.agents = agents
 
     def __repr__(self) -> str:
@@ -567,9 +568,6 @@ def plan(target: str) -> ScanPlan:
         plan_data = _call_llm_url_planner(target, fingerprint)
 
         agents = plan_data["agents"]
-        # attack_chain always runs after attack-surface agents for URL targets.
-        if "attack_chain" not in agents:
-            agents.append("attack_chain")
 
         return ScanPlan(
             target_type="url",
