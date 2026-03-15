@@ -23,6 +23,11 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   title: "Pulse",
   description: "Autonomous penetration testing with agent-driven workflows",
+  icons: {
+    icon: "/image.png",
+    shortcut: "/image.png",
+    apple: "/image.png",
+  },
 };
 
 export default function RootLayout({
