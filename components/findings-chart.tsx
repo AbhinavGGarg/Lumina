@@ -89,6 +89,8 @@ export function FindingsChart({ scan }: { scan: ScanState }) {
 
           return (
             <g key={row.component}>
+              <title>{row.component}</title>
+
               {/* Component label */}
               <text
                 x={PAD_X}
