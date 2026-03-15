@@ -60,7 +60,7 @@ function LlmStreamPanel({ llmLog }: { llmLog: string[] }) {
   const latestBlock = blocks[blocks.length - 1];
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0d0d0d] overflow-hidden flex flex-col h-full min-h-100 max-h-200 shadow-2xl">
+    <div className="rounded-xl border border-white/10 bg-[#0d0d0d] overflow-hidden flex h-full flex-col shadow-2xl">
       {/* Header */}
       <div className="w-full flex items-center justify-between px-5 py-3.5 border-b border-white/5 bg-[#161616]">
         <div className="flex items-center gap-2">
@@ -83,23 +83,26 @@ function LlmStreamPanel({ llmLog }: { llmLog: string[] }) {
       </div>
 
       {/* Stream content */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-5 py-4 scroll-smooth"
-      >
-        {blocks.map((block, bi) => (
-          <div key={bi} className="mb-6">
-            <p className="text-[11px] font-mono text-purple-400 mb-2 uppercase tracking-widest">
-              &gt; [{block.agent}] process
-            </p>
-            <p className="font-mono text-[13px] text-[#c9d1d9] leading-relaxed whitespace-pre-wrap break-all">
-              {block.tokens.join("")}
-              {!block.done && bi === blocks.length - 1 && (
-                <span className="inline-block w-2 h-4 bg-purple-400 ml-1 animate-pulse align-middle" />
-              )}
-            </p>
-          </div>
-        ))}
+      <div className="relative flex-1 min-h-0">
+        <div
+          ref={scrollRef}
+          className="h-full overflow-y-auto px-5 py-4 pb-8 scroll-smooth"
+        >
+          {blocks.map((block, bi) => (
+            <div key={bi} className="mb-6">
+              <p className="text-[11px] font-mono text-purple-400 mb-2 uppercase tracking-widest">
+                &gt; [{block.agent}] process
+              </p>
+              <p className="font-mono text-[13px] text-[#c9d1d9] leading-relaxed whitespace-pre-wrap break-all">
+                {block.tokens.join("")}
+                {!block.done && bi === blocks.length - 1 && (
+                  <span className="inline-block w-2 h-4 bg-purple-400 ml-1 animate-pulse align-middle" />
+                )}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-8 bg-gradient-to-t from-[#0d0d0d] to-transparent" />
       </div>
     </div>
   );
@@ -210,8 +213,13 @@ export default function ScanPage() {
   const isRunning = scan.status === "running" || scan.status === "pending";
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-white flex flex-col px-6 md:px-12 xl:px-24 pt-8 pb-16 font-sans">
-      <div className="w-full max-w-350 mx-auto flex flex-col gap-8">
+    <main className="relative page-shell min-h-screen overflow-hidden bg-[#0a0a0a] text-white flex flex-col pt-8 pb-16 font-sans">
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-[radial-gradient(900px_460px_at_12%_0%,rgba(168,85,247,0.08),transparent_60%),radial-gradient(800px_420px_at_88%_0%,rgba(59,130,246,0.07),transparent_60%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0a0a0a]/20 to-[#0a0a0a]/55" />
+      </div>
+
+      <div className="relative z-10 page-container flex flex-col gap-8">
         {/* Header Console */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 rounded-2xl border border-white/10 bg-[#111] shadow-2xl relative overflow-hidden">
           {/* Subtle bg glow */}
@@ -220,7 +228,7 @@ export default function ScanPage() {
           <div className="flex flex-col items-start gap-2 z-10">
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-serif font-medium tracking-tight">
-                {isRunning ? "Active Operation" : "Operation Complete"}
+                {isRunning ? "Active Operation" : "Operation Summary"}
               </h1>
               <StatusBadge status={scan.status} />
             </div>
@@ -262,10 +270,10 @@ export default function ScanPage() {
         {/* 3-Column SaaS Dashboard Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Column 1: Pipeline & Status (Col Span 3) */}
-          <div className="flex flex-col gap-6 lg:col-span-3">
+          <div className="flex flex-col gap-6 lg:col-span-3 lg:h-[42rem] lg:self-stretch lg:overflow-hidden">
             {/* Severity Summary */}
             {scan.findings.length > 0 && (
-              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg">
+              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg shrink-0">
                 <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest">
                   <ShieldAlert className="w-4 h-4 text-white/40" />
                   Threat Overview
@@ -278,40 +286,48 @@ export default function ScanPage() {
               </div>
             )}
 
-            <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-4 shadow-lg">
+            <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-4 shadow-lg shrink-0 lg:h-[20rem] overflow-hidden">
               <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest">
                 <Cpu className="w-4 h-4 text-white/40" />
                 Execution Pipeline
               </div>
-              <ScanProgress scan={scan} />
+              <div className="relative flex-1 min-h-0">
+                <div className="h-full overflow-y-auto pr-1 pb-5">
+                  <ScanProgress scan={scan} />
+                </div>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-7 bg-gradient-to-t from-[#111] to-transparent" />
+              </div>
             </div>
 
             {/* System Log */}
             {scan.log.length > 0 && (
-              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg">
-                <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest">
+              <div className="bg-[#111] border border-white/10 rounded-xl p-5 flex flex-col gap-3 shadow-lg lg:flex-1 lg:min-h-0 overflow-hidden">
+                <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest shrink-0">
                   System Transcript
                 </h3>
-                <div className="text-[11px] text-white/40 font-mono flex flex-col gap-1.5 max-h-60 overflow-y-auto pr-2">
-                  {scan.log.map((entry, i) => (
-                    <span
-                      key={i}
-                      className={
-                        entry.startsWith("[SKIP]")
-                          ? "text-yellow-500/60"
-                          : undefined
-                      }
-                    >
-                      {entry}
-                    </span>
-                  ))}
+                <div className="relative lg:flex-1 lg:min-h-0">
+                  <div className="h-full text-[11px] text-white/40 font-mono flex flex-col gap-1.5 overflow-y-auto pr-2 pb-5">
+                    {scan.log.map((entry, i) => (
+                      <span
+                        key={i}
+                        className={
+                          entry.startsWith("[SKIP]")
+                            ? "text-yellow-500/60"
+                            : undefined
+                        }
+                      >
+                        {entry}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-7 bg-gradient-to-t from-[#111] to-transparent" />
                 </div>
               </div>
             )}
           </div>
 
           {/* Column 2: Agent Reasoning Engine (Col Span 5 or 6) */}
-          <div className="lg:col-span-5 h-150 lg:h-auto lg:self-stretch">
+          <div className="lg:col-span-5 h-[34rem] lg:h-[42rem] lg:self-stretch">
             {scan.llm_log.length > 0 ? (
               <LlmStreamPanel llmLog={scan.llm_log} />
             ) : (
@@ -324,47 +340,66 @@ export default function ScanPage() {
           </div>
 
           {/* Column 3: Findings (Col Span 4 or 3) */}
-          <div className="flex flex-col gap-4 lg:col-span-4 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg h-150 lg:h-auto lg:self-stretch overflow-y-auto">
-            <h2 className="text-xs font-semibold text-white/50 uppercase tracking-widest flex items-center justify-between sticky top-0 bg-[#111] z-10 pb-2 mb-2 border-b border-white/5 w-full">
+          <div className="flex flex-col gap-4 lg:col-span-4 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg h-[34rem] lg:h-[42rem] lg:self-stretch overflow-hidden">
+            <h2 className="text-xs font-semibold text-white/50 uppercase tracking-widest flex items-center justify-between shrink-0 pb-2 mb-2 border-b border-white/5 w-full">
               <span>Discovered Vulnerabilities</span>
               <span className="bg-white/10 text-white/80 px-2 py-0.5 rounded-full">
                 {scan.findings.length}
               </span>
             </h2>
 
-            <div className="flex flex-col gap-3">
-              {sortedFindings.length === 0 ? (
-                <p className="text-sm text-white/30 text-center py-12">
-                  {scan.status === "running"
-                    ? "Scanning engines active..."
-                    : "No vulnerabilities detected based on current rulesets."}
-                </p>
-              ) : (
-                sortedFindings.map((f, i) => (
-                  <FindingCard key={i} finding={f} index={i} />
-                ))
-              )}
+            <div className="relative flex-1 min-h-0">
+              <div className="h-full overflow-y-auto pr-1 pb-5">
+                <div className="flex flex-col gap-3">
+                {sortedFindings.length === 0 ? (
+                  <p className="text-sm text-white/30 text-center py-12">
+                    {scan.status === "running"
+                      ? "Scanning engines active..."
+                      : "No vulnerabilities detected based on current rulesets."}
+                  </p>
+                ) : (
+                  sortedFindings.map((f, i) => (
+                    <FindingCard key={i} finding={f} index={i} />
+                  ))
+                )}
+                </div>
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-7 bg-gradient-to-t from-[#111] to-transparent" />
             </div>
           </div>
         </div>
 
         {/* ── Architecture Map + Findings by Component ─────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start lg:items-stretch">
 
-          <div className="lg:col-span-7 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
-            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
+          <div className="lg:col-span-7 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg flex flex-col lg:h-[24rem] overflow-hidden">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4 shrink-0">
               <GitBranch className="w-4 h-4 text-white/40" />
               Attack Chain
             </div>
-            <AttackChainGraph scan={scan} />
+            <div className="relative flex-1 min-h-0">
+              <div className="h-full overflow-auto pr-1 pb-4">
+                <div className="min-h-full flex items-center">
+                  <AttackChainGraph scan={scan} />
+                </div>
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-6 bg-gradient-to-t from-[#111] to-transparent" />
+            </div>
           </div>
 
-          <div className="lg:col-span-5 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg">
-            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
+          <div className="lg:col-span-5 bg-[#111] border border-white/10 rounded-xl p-5 shadow-lg flex flex-col lg:h-[24rem] overflow-hidden">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white/50 uppercase tracking-widest mb-4 shrink-0">
               <BarChart3 className="w-4 h-4 text-white/40" />
               Findings by Component
             </div>
-            <FindingsChart scan={scan} />
+            <div className="relative flex-1 min-h-0">
+              <div className="h-full overflow-auto pr-1 pb-4">
+                <div className="min-h-full flex items-center">
+                  <FindingsChart scan={scan} />
+                </div>
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-6 bg-gradient-to-t from-[#111] to-transparent" />
+            </div>
           </div>
 
         </div>
