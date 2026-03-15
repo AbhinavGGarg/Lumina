@@ -6,7 +6,7 @@ Pulse is an AI-orchestrated penetration testing platform that combines a LangGra
 
 A **planner node** inspects the target first:
 
-- **URL targets** — runs a fixed network pipeline: recon → SQL injection → XSS → dependency audit → secrets → attack chain → report.
+- **URL targets** — runs a quick pre-scan fingerprint (httpx + whatweb) and uses LLM-driven adaptive planning to select relevant web agents. Under uncertain signal (timeouts/connection issues/localhost), guardrails keep a safe baseline of recon + SQL injection + XSS before attack chain + report.
 - **Repository targets** — walks the file tree, builds a fingerprint, and asks the LLM to choose only the relevant agents from: `static_c`, `static`, `deps_py`, `deps_js`, `secrets`.
 
 Each selected **agent node** runs its toolset, skips the LLM call if the tools fail to produce output, and accumulates structured findings into shared graph state. After all scan agents complete, an **attack chain node** reasons over the combined findings to produce a causal MITRE-aligned exploit graph. A final **report node** synthesises everything into a Markdown vulnerability report.
@@ -15,20 +15,19 @@ LLM token streaming is pushed to the frontend in real time via SSE throughout ev
 
 ## Agent pipeline
 
-| Agent                 | Tools                        | Target type            |
-| --------------------- | ---------------------------- | ---------------------- |
-| Planner               | LLM + file-tree fingerprint  | both                   |
-| Recon                 | httpx · nmap · whatweb       | URL                    |
-| SQL Injection         | sqlmap                       | URL                    |
-| XSS                   | dalfox                       | URL                    |
-| C/C++ Static Analysis | cppcheck · semgrep p/c       | repo                   |
-| Static Analysis       | semgrep · bandit             | repo                   |
-| Python Deps           | pip-audit                    | repo                   |
-| JS Deps               | npm audit                    | repo                   |
-| Dependencies          | pip-audit · npm audit        | URL (via /repos mount) |
-| Secrets               | trufflehog · detect-secrets  | both                   |
-| Attack Chain          | LLM reasoning (MITRE ATT&CK) | both                   |
-| Report                | LLM synthesis                | both                   |
+| Agent                 | Tools                        | Target type |
+| --------------------- | ---------------------------- | ----------- |
+| Planner               | LLM + file-tree fingerprint  | both        |
+| Recon                 | httpx · nmap · whatweb       | URL         |
+| SQL Injection         | sqlmap                       | URL         |
+| XSS                   | dalfox                       | URL         |
+| C/C++ Static Analysis | cppcheck · semgrep p/c       | repo        |
+| Static Analysis       | semgrep · bandit             | repo        |
+| Python Deps           | pip-audit                    | repo        |
+| JS Deps               | npm audit                    | repo        |
+| Secrets               | trufflehog · detect-secrets  | both        |
+| Attack Chain          | LLM reasoning (MITRE ATT&CK) | both        |
+| Report                | LLM synthesis                | both        |
 
 ## LLM providers
 
