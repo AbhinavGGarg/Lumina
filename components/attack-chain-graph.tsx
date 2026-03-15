@@ -305,7 +305,7 @@ export function AttackChainGraph({ scan }: { scan: ScanState }) {
     <div className="flex flex-col gap-4">
       {inferredChain && (
         <div className="text-[10px] font-mono uppercase tracking-widest text-amber-300/70">
-          Theoretical chain inferred from findings (fallback)
+          Theoretical chain inferred from findings
         </div>
       )}
       <div className="w-full overflow-x-auto">
