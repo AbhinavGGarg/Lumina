@@ -137,15 +137,132 @@ const LEGEND = [
 
 const LEGEND_ITEM_GAP = 98;
 
+const SEVERITY_RANK: Record<string, number> = {
+  critical: 5,
+  high: 4,
+  medium: 3,
+  low: 2,
+  info: 1,
+};
+
+const TYPE_ORDER: Record<string, number> = {
+  initial_access: 0,
+  credential_access: 1,
+  lateral_movement: 2,
+  exfiltration: 3,
+  impact: 4,
+  service: 5,
+};
+
+function inferTypeFromFindingText(text: string): string {
+  const lower = text.toLowerCase();
+  if (/(secret|token|apikey|api key|credential|password|hash)/.test(lower)) {
+    return "credential_access";
+  }
+  if (
+    /(sqli|sql injection|xss|rce|command injection|path traversal|auth bypass|cve|vulnerability)/.test(
+      lower,
+    )
+  ) {
+    return "initial_access";
+  }
+  if (/(privilege|lateral|pivot|admin takeover)/.test(lower)) {
+    return "lateral_movement";
+  }
+  if (/(exfil|data leak|dump|exposure|disclosure)/.test(lower)) {
+    return "exfiltration";
+  }
+  if (/(delete|destruct|encrypt|denial|dos|impact)/.test(lower)) {
+    return "impact";
+  }
+  return "service";
+}
+
+function inferAttackChainFromFindings(scan: ScanState): AttackChain | null {
+  if (!scan.findings.length) return null;
+
+  const seen = new Set<string>();
+  const deduped = scan.findings.filter((f) => {
+    const key = `${f.title.trim().toLowerCase()}|${f.component.trim().toLowerCase()}|${f.tool
+      .trim()
+      .toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const selected = [...deduped]
+    .sort((a, b) => {
+      const diff =
+        (SEVERITY_RANK[b.severity?.toLowerCase() ?? "info"] ?? 1) -
+        (SEVERITY_RANK[a.severity?.toLowerCase() ?? "info"] ?? 1);
+      if (diff !== 0) return diff;
+      return a.title.localeCompare(b.title);
+    })
+    .slice(0, 6);
+
+  const rawNodes: ChainNode[] = selected.map((f, i) => {
+    const text = `${f.title} ${f.description} ${f.tool} ${f.component}`;
+    return {
+      id: `node_${i + 1}`,
+      label: f.title.slice(0, 42) || "Unnamed finding",
+      type: inferTypeFromFindingText(text),
+      finding_ref: f.title || "Unnamed finding",
+    };
+  });
+
+  const nodes = [...rawNodes].sort(
+    (a, b) =>
+      (TYPE_ORDER[a.type] ?? TYPE_ORDER.service) -
+      (TYPE_ORDER[b.type] ?? TYPE_ORDER.service),
+  );
+
+  const edges = nodes.slice(0, -1).map((node, i) => ({
+    from_id: node.id,
+    to_id: nodes[i + 1].id,
+    label: "may enable",
+    justification:
+      "This is an inferred theoretical transition based on automated findings.",
+  }));
+
+  const narrative =
+    nodes.length > 1
+      ? `A plausible attack path could begin with ${nodes[0].label} and progress through additional weaknesses toward ${nodes[nodes.length - 1].label}. This is theoretical and should be manually validated.`
+      : `One plausible security concern centers on ${nodes[0]?.label ?? "an identified weakness"}. No reliable multi-step chaining evidence was produced automatically.`;
+
+  const mermaidLines = ["flowchart LR"];
+  nodes.forEach((n) => {
+    const safe = n.label.replaceAll('"', "'");
+    mermaidLines.push(`  ${n.id}["${safe}"]`);
+  });
+  edges.forEach((e) => {
+    mermaidLines.push(`  ${e.from_id} -->|${e.label}| ${e.to_id}`);
+  });
+
+  return {
+    nodes,
+    edges,
+    narrative,
+    mermaid: mermaidLines.join("\\n"),
+  };
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function AttackChainGraph({ scan }: { scan: ScanState }) {
-  const chain: AttackChain = scan.attack_chain ?? {
+  const providedChain: AttackChain = scan.attack_chain ?? {
     nodes: [],
     edges: [],
     narrative: "",
     mermaid: "",
   };
+
+  const inferredChain =
+    !providedChain.nodes.length && scan.status !== "running"
+      ? inferAttackChainFromFindings(scan)
+      : null;
+
+  const chain: AttackChain = inferredChain ?? providedChain;
 
   if (!chain.nodes.length) {
     return (
@@ -186,6 +303,11 @@ export function AttackChainGraph({ scan }: { scan: ScanState }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {inferredChain && (
+        <div className="text-[10px] font-mono uppercase tracking-widest text-amber-300/70">
+          Theoretical chain inferred from findings
+        </div>
+      )}
       <div className="w-full overflow-x-auto">
         <svg
           viewBox={`0 0 ${svgW} ${svgH}`}
