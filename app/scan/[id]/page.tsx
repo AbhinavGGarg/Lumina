@@ -115,6 +115,11 @@ function LlmStreamPanel({ llmLog }: { llmLog: string[] }) {
 export default function ScanPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const transcriptAutoScrollRef = useRef(true);
+  const transcriptUserInteractedRef = useRef(false);
+  const transcriptProgrammaticScrollRef = useRef(false);
+  const transcriptRafRef = useRef<number | null>(null);
   const [scan, setScan] = useState<ScanState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -124,6 +129,9 @@ export default function ScanPage() {
 
   useEffect(() => {
     if (!id) return;
+
+    transcriptAutoScrollRef.current = true;
+    transcriptUserInteractedRef.current = false;
 
     const es = new EventSource(`${API}/api/scan/${id}/stream`);
 
@@ -146,6 +154,81 @@ export default function ScanPage() {
 
     return () => es.close();
   }, [id]);
+
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (!el || !transcriptAutoScrollRef.current) {
+      return;
+    }
+
+    const startTop = el.scrollTop;
+    const targetTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    const delta = targetTop - startTop;
+
+    if (Math.abs(delta) < 1) {
+      el.scrollTop = targetTop;
+      return;
+    }
+
+    if (transcriptRafRef.current !== null) {
+      cancelAnimationFrame(transcriptRafRef.current);
+      transcriptRafRef.current = null;
+    }
+
+    const durationMs = 280;
+    const startTs = performance.now();
+
+    const tick = (ts: number) => {
+      const elapsed = ts - startTs;
+      const t = Math.min(1, elapsed / durationMs);
+      const eased = 1 - (1 - t) ** 3; // easeOutCubic
+      transcriptProgrammaticScrollRef.current = true;
+      el.scrollTop = startTop + delta * eased;
+      transcriptProgrammaticScrollRef.current = false;
+
+      if (t < 1 && transcriptAutoScrollRef.current) {
+        transcriptRafRef.current = requestAnimationFrame(tick);
+      } else {
+        transcriptRafRef.current = null;
+      }
+    };
+
+    transcriptRafRef.current = requestAnimationFrame(tick);
+  }, [scan?.log.length]);
+
+  useEffect(() => {
+    return () => {
+      if (transcriptRafRef.current !== null) {
+        cancelAnimationFrame(transcriptRafRef.current);
+      }
+    };
+  }, []);
+
+  function handleTranscriptScroll() {
+    if (transcriptProgrammaticScrollRef.current) {
+      return;
+    }
+
+    if (!transcriptUserInteractedRef.current) {
+      return;
+    }
+
+    const el = transcriptRef.current;
+    if (!el) {
+      return;
+    }
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    transcriptAutoScrollRef.current = distanceFromBottom < 48;
+
+    if (!transcriptAutoScrollRef.current && transcriptRafRef.current !== null) {
+      cancelAnimationFrame(transcriptRafRef.current);
+      transcriptRafRef.current = null;
+    }
+  }
+
+  function handleTranscriptUserIntent() {
+    transcriptUserInteractedRef.current = true;
+  }
 
   async function openReportModal() {
     if (!id) return;
@@ -317,7 +400,7 @@ export default function ScanPage() {
                 Execution Pipeline
               </div>
               <div className="relative flex-1 min-h-0">
-                <div className="h-full overflow-y-auto pr-1 pb-5">
+                <div className="h-full overflow-y-auto pb-5">
                   <ScanProgress scan={scan} />
                 </div>
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-7 bg-gradient-to-t from-[#111] to-transparent" />
@@ -331,7 +414,14 @@ export default function ScanPage() {
                   System Transcript
                 </h3>
                 <div className="relative lg:flex-1 lg:min-h-0">
-                  <div className="h-full text-[11px] text-white/40 font-mono flex flex-col gap-1.5 overflow-y-auto pr-2 pb-5">
+                  <div
+                    ref={transcriptRef}
+                    onScroll={handleTranscriptScroll}
+                    onWheel={handleTranscriptUserIntent}
+                    onTouchMove={handleTranscriptUserIntent}
+                    onPointerDown={handleTranscriptUserIntent}
+                    className="h-full text-[11px] text-white/40 font-mono flex flex-col gap-1.5 overflow-y-auto pr-2 pb-5"
+                  >
                     {scan.log.map((entry, i) => (
                       <span
                         key={i}
@@ -433,7 +523,7 @@ export default function ScanPage() {
             </div>
             <div className="relative flex-1 min-h-0">
               <div className="h-full overflow-auto pr-1 pb-4">
-                <div className="min-h-full flex items-center">
+                <div className="min-h-full w-full">
                   <AttackChainGraph scan={scan} />
                 </div>
               </div>
@@ -448,7 +538,7 @@ export default function ScanPage() {
             </div>
             <div className="relative flex-1 min-h-0">
               <div className="h-full overflow-auto pr-1 pb-4">
-                <div className="min-h-full flex items-center">
+                <div className="min-h-full w-full">
                   <FindingsChart scan={scan} />
                 </div>
               </div>
