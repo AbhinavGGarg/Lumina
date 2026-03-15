@@ -7,6 +7,7 @@ import type { Components } from "react-markdown";
 import { X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
+import { MermaidDiagram } from "@/components/mermaid-diagram";
 
 interface ReportModalProps {
   open: boolean;
@@ -95,17 +96,25 @@ const mdComponents: Components = {
     </ol>
   ),
   li: ({ children }) => <li className="leading-relaxed pl-1">{children}</li>,
-  pre: ({ children }) => (
-    <div className="my-5">
-      <pre className="rounded-xl bg-[#0d0d0d] border border-white/10 px-5 py-4 overflow-x-auto text-xs font-mono text-[#c9d1d9] leading-relaxed">
-        {children}
-      </pre>
-    </div>
-  ),
+  pre: ({ children }) => <>{children}</>,
   code: ({ className, children }) => {
-    if (className) {
-      return <code className={`${className} font-mono text-[#c9d1d9] text-xs`}>{children}</code>;
+    const value = String(children).replace(/\n$/, "");
+    const language = (className ?? "").replace("language-", "").toLowerCase();
+
+    if (language === "mermaid") {
+      return <MermaidDiagram chart={value} />;
     }
+
+    if (className) {
+      return (
+        <div className="my-5">
+          <pre className="rounded-xl bg-[#0d0d0d] border border-white/10 px-5 py-4 overflow-x-auto text-xs font-mono text-[#c9d1d9] leading-relaxed">
+            <code className={`${className} font-mono text-[#c9d1d9] text-xs`}>{children}</code>
+          </pre>
+        </div>
+      );
+    }
+
     return (
       <code className="font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded text-white">
         {children}
