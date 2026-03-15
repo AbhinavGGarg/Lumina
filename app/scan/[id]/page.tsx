@@ -6,6 +6,8 @@ import { ScanState } from "@/types/scan";
 import { ScanProgress } from "@/components/scan-progress";
 import { FindingCard } from "@/components/finding-card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TextAnimate } from "@/components/ui/text-animate";
 import { Terminal, ShieldAlert, Cpu, GitBranch, BarChart3 } from "lucide-react";
 import { AttackChainGraph } from "@/components/attack-chain-graph";
 import { FindingsChart } from "@/components/findings-chart";
@@ -208,6 +210,8 @@ export default function ScanPage() {
   );
 
   const isRunning = scan.status === "running" || scan.status === "pending";
+  const architecture = scan.architecture_summary?.trim() ?? "";
+  const showArchitectureSkeleton = isRunning && !architecture;
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white flex flex-col px-6 md:px-12 xl:px-24 pt-8 pb-16 font-sans">
@@ -229,28 +233,49 @@ export default function ScanPage() {
               <span className="font-mono text-sm text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">
                 {scan.target}
               </span>
-              {scan.architecture_summary && (
-                <div className="flex items-start gap-1.5 text-sm text-white/40">
-                  <span className="shrink-0 mt-px">Architecture:</span>
-                  <span className="font-mono text-sm text-white/70 bg-white/5 px-1.5 py-px rounded border border-white/10 leading-relaxed">
-                    {scan.architecture_summary}
-                  </span>
+            </div>
+
+            <div className="mt-3 w-full border-t border-white/10 pt-3">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-white/45">
+                Architecture
+              </div>
+
+              {showArchitectureSkeleton ? (
+                <div className="mt-2 space-y-2">
+                  <Skeleton className="h-3 w-48 bg-white/10" />
+                  <Skeleton className="h-3 w-full bg-white/10" />
+                  <Skeleton className="h-3 w-4/5 bg-white/10" />
                 </div>
+              ) : architecture ? (
+                <TextAnimate
+                  animation="blurInUp"
+                  by="character"
+                  once
+                  duration={1.2}
+                  delay={0.15}
+                  className="mt-2 block text-sm leading-relaxed text-white/75"
+                >
+                  {architecture}
+                </TextAnimate>
+              ) : (
+                <p className="mt-2 text-sm text-white/35">
+                  Architecture analysis unavailable.
+                </p>
               )}
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto z-10">
+          <div className="flex items-center gap-3 w-full md:w-auto md:self-start z-10">
             <Button
               variant="outline"
               onClick={() => router.push("/")}
-              className="bg-[#1a1a1a] hover:bg-[#2a2a2a] border-white/10 text-white w-full md:w-auto"
+              className="bg-[#1a1a1a] hover:bg-[#2a2a2a] border-white/10 text-white md:min-w-32.5"
             >
               + New Target
             </Button>
             {scan.status === "complete" && (
               <Button
-                className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20 w-full md:w-auto"
+                className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20 md:min-w-37.5"
                 onClick={openReportModal}
               >
                 Detailed Report →
@@ -315,10 +340,20 @@ export default function ScanPage() {
             {scan.llm_log.length > 0 ? (
               <LlmStreamPanel llmLog={scan.llm_log} />
             ) : (
-              <div className="h-full rounded-xl border border-white/5 border-dashed flex items-center justify-center p-8 bg-[#111]/50 text-center">
-                <p className="text-sm font-mono text-white/30 tracking-tight">
-                  Awaiting LLM interpretation stream...
-                </p>
+              <div className="h-full rounded-xl border border-white/5 border-dashed p-6 bg-[#111]/50">
+                <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-white/35">
+                  <span className="h-2 w-2 rounded-full bg-purple-400/70 animate-pulse" />
+                  LLM interpretation warming up
+                </div>
+                <div className="mt-4 space-y-5">
+                  {[0, 1, 2].map((row) => (
+                    <div key={row} className="space-y-2">
+                      <Skeleton className="h-2.5 w-32 bg-white/10" />
+                      <Skeleton className="h-2.5 w-full bg-white/10" />
+                      <Skeleton className="h-2.5 w-11/12 bg-white/10" />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -334,11 +369,31 @@ export default function ScanPage() {
 
             <div className="flex flex-col gap-3">
               {sortedFindings.length === 0 ? (
-                <p className="text-sm text-white/30 text-center py-12">
-                  {scan.status === "running"
-                    ? "Scanning engines active..."
-                    : "No vulnerabilities detected based on current rulesets."}
-                </p>
+                scan.status === "running" ? (
+                  <div className="py-2 space-y-3">
+                    <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-white/35">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400/70 animate-pulse" />
+                      Scanning engines active
+                    </div>
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <Skeleton className="h-3 w-24 bg-white/10" />
+                          <Skeleton className="h-3 w-12 bg-white/10" />
+                        </div>
+                        <Skeleton className="h-3 w-full bg-white/10" />
+                        <Skeleton className="h-3 w-4/5 bg-white/10" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/30 text-center py-12">
+                    No vulnerabilities detected based on current rulesets.
+                  </p>
+                )
               ) : (
                 sortedFindings.map((f, i) => (
                   <FindingCard key={i} finding={f} index={i} />
