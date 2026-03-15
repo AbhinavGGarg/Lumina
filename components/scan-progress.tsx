@@ -4,7 +4,7 @@ import { ScanState } from "@/types/scan";
 const AGENT_META: Record<string, { label: string; icon: string; tools: string }> = {
   planner:          { label: "Planner",           icon: "🧠", tools: "language detection" },
   recon:            { label: "Recon",             icon: "🌐", tools: "httpx · nmap · whatweb" },
-  graph_builder:    { label: "Architecture Map",  icon: "🗺️",  tools: "LLM reasoning" },
+  attack_chain:     { label: "Attack Chain",       icon: "⛓️",  tools: "LLM reasoning" },
   sqli:             { label: "SQL Injection",      icon: "💉", tools: "sqlmap" },
   sql_injection:    { label: "SQL Injection",      icon: "💉", tools: "sqlmap" },
   xss:              { label: "XSS",               icon: "🎯", tools: "dalfox" },

@@ -23,42 +23,78 @@ CRITICAL RULES FOR IGNORING FALSE POSITIVES:
 3. If there are no real, actionable security flaws indicating a weakness in the target, you MUST return an empty array: []
 """
 
-GRAPH_BUILDER_SYSTEM = """You are a security architect mapping the component architecture of a target web application.
+ATTACK_CHAIN_SYSTEM = """You are a senior red team operator and threat intelligence analyst.
 
-Based on the reconnaissance data provided, identify the key components of the application and how they communicate. This map will be used to visualise which components are being tested and where vulnerabilities are found.
+Your task: given a list of confirmed security findings, construct an attack chain graph showing how an adversary could chain these vulnerabilities together to escalate from initial access to impact.
 
-Return ONLY a JSON object with this exact structure -- no markdown, no explanation:
+=== STEP-BY-STEP REASONING (chain-of-thought) ===
+Before producing JSON, reason through these questions silently:
+1. Which finding represents the EARLIEST point of entry an attacker could exploit?
+2. For each subsequent finding, does exploiting it REQUIRE a prior finding to be exploited first? If yes, draw an edge. If no, do NOT draw an edge.
+3. What is the final impact the attacker achieves at the end of the chain?
+
+=== OUTPUT FORMAT ===
+Return ONLY a JSON object — no markdown, no explanation, no backticks:
 {
   "nodes": [
-    {"id": "frontend",  "label": "React SPA",     "type": "frontend"},
-    {"id": "api",       "label": "REST API",       "type": "api"},
-    {"id": "auth",      "label": "JWT Auth",       "type": "auth"},
-    {"id": "db",        "label": "PostgreSQL",     "type": "database"}
+    {
+      "id": "node_1",
+      "label": "SQLi in Login",
+      "type": "initial_access",
+      "finding_ref": "SQL Injection in /login endpoint"
+    }
   ],
   "edges": [
-    {"from_id": "frontend", "to_id": "api",  "label": "HTTPS"},
-    {"from_id": "api",      "to_id": "auth", "label": "JWT"},
-    {"from_id": "api",      "to_id": "db",   "label": "SQL"}
-  ]
+    {
+      "from_id": "node_1",
+      "to_id": "node_2",
+      "label": "enables",
+      "justification": "SQLi exposes credentials stored in the users table, enabling authentication bypass"
+    }
+  ],
+  "narrative": "An attacker begins by exploiting the SQL injection in the login form to dump user credentials. Using those credentials, they bypass authentication and gain admin access. From there, they leverage the exposed admin API to exfiltrate the full customer database.",
+  "mermaid": "flowchart LR\\n  node_1[SQLi in Login] -->|enables| node_2[Auth Bypass]\\n  node_2 -->|enables| node_3[Data Exfiltration]"
 }
 
-Node type must be one of: frontend, api, backend, auth, database, cache, external, service
-Rules:
-- Create 4–8 nodes. Keep labels short (2–4 words).
-- Base nodes on what recon revealed; infer reasonable components for unobserved parts.
-- id must be a short slug (no spaces). label is the human-readable name.
-- Edges represent direct communication/data flow between components.
+=== NODE TYPES (MITRE ATT&CK aligned) ===
+- initial_access    — first foothold (SQLi, XSS that steals cookies, exposed service)
+- credential_access — stealing or cracking credentials
+- lateral_movement  — moving between systems or privilege levels
+- exfiltration      — extracting data from the target
+- impact            — destroying, encrypting, or defacing data
+
+=== THE NO PHANTOM EDGES RULE (CRITICAL) ===
+An edge from A → B is ONLY valid when exploiting A is a NECESSARY prerequisite for exploiting B.
+Ask yourself: "Could an attacker exploit B WITHOUT first exploiting A?" If YES → NO EDGE.
+
+CORRECT example:
+  SQLi exposes password hashes → attacker cracks hashes → attacker logs in as admin
+  ✓ Edge: SQLi → Credential Access (SQLi is required to get the hashes)
+  ✓ Edge: Credential Access → Admin Access (cracked creds are required to log in)
+
+WRONG example:
+  SQLi found in product search endpoint
+  XSS found in review form
+  ✗ Do NOT connect SQLi → XSS. These are independent findings with no causal chain.
+
+=== ADDITIONAL RULES ===
+- Include only findings that form part of a meaningful chain. Isolated findings with no chain connections should still be nodes but with no edges.
+- Create 3–7 nodes maximum. Keep labels short (2–5 words).
+- id must be a short slug like "node_1", "node_2". label is human-readable.
+- The narrative field must be 2–4 sentences describing the full attack story in plain English.
+- The mermaid field must be a valid Mermaid flowchart LR diagram. Use \\n for newlines. Escape special characters in node labels with quotes.
+- Every edge MUST include a justification field explaining the causal link.
 """
 
-GRAPH_BUILDER_PROMPT = """Target: {target}
+ATTACK_CHAIN_PROMPT = """Target: {target}
 
 Architecture summary: {architecture_summary}
 Threat model: {threat_model}
 
-Reconnaissance findings:
-{recon_findings}
+All confirmed findings from automated scans:
+{all_findings}
 
-Build the component architecture map for this target."""
+Construct the attack chain graph from these findings."""
 
 PLANNER_SYSTEM = """You are a senior security architect. Review this repository snapshot. Understand the tech stack and its threat vectors.
 
@@ -95,11 +131,20 @@ Threat Model: {threat_model}
 Findings from automated scans:
 {findings}
 
+Attack Chain:
+{attack_chain_narrative}
+
+Attack Chain Diagram (Mermaid):
+{attack_chain_mermaid}
+
 Format:
 # Vulnerability Report -- {target}
 
 ## Executive Summary
 (2-3 sentences summarising the overall security posture based strictly on the findings above.)
+
+## Attack Chain
+(Include this section only if an attack chain narrative was provided above. Copy the narrative text here. Then include the Mermaid diagram in a fenced code block labelled ```mermaid. If no chain was identified, write: "No multi-step attack chain was identified from the automated findings.")
 
 ## Findings
 (If the findings array is empty, state: "No vulnerabilities were detected during automated scans." and DO NOT include the table.)

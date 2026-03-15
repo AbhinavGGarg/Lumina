@@ -12,21 +12,25 @@ export interface Finding {
   component: string;
 }
 
-export interface GraphNode {
+export interface ChainNode {
   id: string;
   label: string;
-  type: string; // frontend | api | backend | auth | database | cache | external | service
+  type: string; // initial_access | credential_access | lateral_movement | exfiltration | impact | service
+  finding_ref: string;
 }
 
-export interface GraphEdge {
+export interface ChainEdge {
   from_id: string;
   to_id: string;
   label: string;
+  justification: string;
 }
 
-export interface AppGraph {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
+export interface AttackChain {
+  nodes: ChainNode[];
+  edges: ChainEdge[];
+  narrative: string;
+  mermaid: string;
 }
 
 export interface ScanState {
@@ -38,7 +42,7 @@ export interface ScanState {
   status: ScanStatus;
   current_agent: string;
   agents_plan: string[];
-  app_graph: AppGraph;
+  attack_chain: AttackChain;
   findings: Finding[];
   log: string[];
   llm_log: string[];

@@ -149,7 +149,7 @@ def plan(target: str) -> ScanPlan:
             target_type="url",
             architecture_summary="Live Web Application",
             threat_model="Network layer threats, XSS, and SQLi.",
-            agents=["recon", "graph_builder", "sqli", "xss", "deps", "secrets", "report"],
+            agents=["recon", "sqli", "xss", "deps", "secrets", "attack_chain", "report"],
         )
 
     # Filesystem target -- dynamically architect a plan.

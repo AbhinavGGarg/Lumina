@@ -31,21 +31,25 @@ class Finding(BaseModel):
     component:   str = ""   # which app component this vuln primarily affects
 
 
-class GraphNode(BaseModel):
-    id:    str
-    label: str
-    type:  str = "service"  # frontend | api | auth | database | cache | external | service
+class ChainNode(BaseModel):
+    id:          str
+    label:       str
+    type:        str = "service"  # initial_access | credential_access | lateral_movement | exfiltration | impact | service
+    finding_ref: str = ""         # title of the source Finding this node represents
 
 
-class GraphEdge(BaseModel):
-    from_id: str
-    to_id:   str
-    label:   str = ""
+class ChainEdge(BaseModel):
+    from_id:      str
+    to_id:        str
+    label:        str = ""
+    justification: str = ""  # why this edge exists — A directly enables B
 
 
-class AppGraph(BaseModel):
-    nodes: list[GraphNode] = []
-    edges: list[GraphEdge] = []
+class AttackChain(BaseModel):
+    nodes:     list[ChainNode] = []
+    edges:     list[ChainEdge] = []
+    narrative: str = ""   # plain-English attack path description
+    mermaid:   str = ""   # Mermaid flowchart LR diagram source
 
 
 class ScanState(BaseModel):
@@ -57,7 +61,7 @@ class ScanState(BaseModel):
     status:               ScanStatus = ScanStatus.pending
     current_agent:        str = ""
     agents_plan:          list[str] = []
-    app_graph:            AppGraph = AppGraph()
+    attack_chain:         AttackChain = AttackChain()
     findings:             list[Finding] = []
     log:                  list[str] = []
     # Raw LLM token stream -- each entry is one token or a control sentinel.

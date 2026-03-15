@@ -22,8 +22,8 @@ from pydantic import BaseModel
 
 from ..core.data_models import Finding, ScanStatus, Severity
 from ..core.prompts import (
-    GRAPH_BUILDER_PROMPT,
-    GRAPH_BUILDER_SYSTEM,
+    ATTACK_CHAIN_PROMPT,
+    ATTACK_CHAIN_SYSTEM,
     INTERPRET_SYSTEM,
     REPORT_PROMPT,
     REPORT_SYSTEM,
@@ -50,7 +50,7 @@ class GraphState(BaseModel):
     architecture_summary: str = ""
     threat_model:         str = ""
     agents_plan:          list[str] = []
-    app_graph:            dict = {}
+    attack_chain:         dict = {}
     findings:             list[dict] = []
     report:               str = ""
 
@@ -239,31 +239,29 @@ def planner_node(state: GraphState) -> dict:
     }
 
 
-def graph_builder_node(state: GraphState) -> dict:
-    """Ask the LLM to build a component architecture graph for the target.
+def attack_chain_node(state: GraphState) -> dict:
+    """Ask the LLM to build an attack chain graph from ALL confirmed findings.
 
-    Runs after recon so the graph incorporates discovered tech stack data.
-    Streams reasoning to the UI via ScanStreamCallback.
+    Runs after all scan agents so the chain incorporates every discovered
+    vulnerability. Streams reasoning to the UI via ScanStreamCallback.
     """
     _update_store(
-        state.scan_id, "graph_builder",
-        "Building component architecture map...",
+        state.scan_id, "attack_chain",
+        "Building attack chain from confirmed findings...",
         [],
     )
 
-    recon_findings = [f for f in state.findings if f.get("agent") == "recon"]
-
-    prompt = GRAPH_BUILDER_PROMPT.format(
+    prompt = ATTACK_CHAIN_PROMPT.format(
         target=state.target,
         architecture_summary=state.architecture_summary or "Unknown",
         threat_model=state.threat_model or "Unknown",
-        recon_findings=_truncate(recon_findings, max_chars=2000)
-                       if recon_findings else "No recon data yet.",
+        all_findings=_truncate(state.findings, max_chars=3000)
+                     if state.findings else "No findings recorded.",
     )
 
-    callback = ScanStreamCallback(scan_id=state.scan_id, agent="graph_builder")
+    callback = ScanStreamCallback(scan_id=state.scan_id, agent="attack_chain")
     llm = get_llm().with_config({"callbacks": [callback]})
-    response = llm.invoke([HumanMessage(content=GRAPH_BUILDER_SYSTEM + "\n\n" + prompt)])
+    response = llm.invoke([HumanMessage(content=ATTACK_CHAIN_SYSTEM + "\n\n" + prompt)])
 
     text = response.content.strip()
     text = re.sub(r"^```(?:json)?\s*", "", text)
@@ -271,33 +269,37 @@ def graph_builder_node(state: GraphState) -> dict:
 
     try:
         parsed = json.loads(text)
-        app_graph = {
-            "nodes": parsed.get("nodes", []),
-            "edges": parsed.get("edges", []),
+        attack_chain = {
+            "nodes":     parsed.get("nodes", []),
+            "edges":     parsed.get("edges", []),
+            "narrative": parsed.get("narrative", ""),
+            "mermaid":   parsed.get("mermaid", ""),
         }
     except (json.JSONDecodeError, ValueError):
-        app_graph = {"nodes": [], "edges": []}
+        attack_chain = {"nodes": [], "edges": [], "narrative": "", "mermaid": ""}
 
-    node_count = len(app_graph.get("nodes", []))
+    node_count = len(attack_chain.get("nodes", []))
     _update_store(
-        state.scan_id, "graph_builder",
-        f"Architecture map built — {node_count} components identified",
+        state.scan_id, "attack_chain",
+        f"Attack chain built — {node_count} steps identified",
         [],
     )
 
     if state.scan_id:
         from ..db.scans import scans  # avoid circular at module level
         if state.scan_id in scans:
-            from ..core.data_models import AppGraph, GraphEdge, GraphNode
+            from ..core.data_models import AttackChain, ChainEdge, ChainNode
             try:
-                scans[state.scan_id].app_graph = AppGraph(
-                    nodes=[GraphNode(**n) for n in app_graph.get("nodes", [])],
-                    edges=[GraphEdge(**e) for e in app_graph.get("edges", [])],
+                scans[state.scan_id].attack_chain = AttackChain(
+                    nodes=[ChainNode(**n) for n in attack_chain.get("nodes", [])],
+                    edges=[ChainEdge(**e) for e in attack_chain.get("edges", [])],
+                    narrative=attack_chain.get("narrative", ""),
+                    mermaid=attack_chain.get("mermaid", ""),
                 )
             except Exception:  # pylint: disable=broad-except
                 pass
 
-    return {"app_graph": app_graph}
+    return {"attack_chain": attack_chain}
 
 
 def recon_node(state: GraphState) -> dict:
@@ -587,12 +589,16 @@ def report_node(state: GraphState) -> dict:
     findings_text = _truncate(state.findings, max_chars=6000)
     architecture = state.architecture_summary or "N/A"
     threats = state.threat_model or "N/A"
-    
+    chain_narrative = state.attack_chain.get("narrative", "") if state.attack_chain else ""
+    chain_mermaid   = state.attack_chain.get("mermaid", "") if state.attack_chain else ""
+
     prompt = REPORT_PROMPT.format(
         target=state.target,
         architecture=architecture,
         threat_model=threats,
         findings=findings_text,
+        attack_chain_narrative=chain_narrative or "No multi-step attack chain identified.",
+        attack_chain_mermaid=chain_mermaid or "",
     )
 
     callback = ScanStreamCallback(scan_id=state.scan_id, agent="report")
@@ -615,7 +621,7 @@ def report_node(state: GraphState) -> dict:
 
 # All node keys registered in the graph.
 _ALL_NODES = {
-    "recon", "graph_builder", "sqli", "xss", "static_c", "static",
+    "recon", "attack_chain", "sqli", "xss", "static_c", "static",
     "deps_py", "deps_js", "deps", "secrets", "report",
 }
 
@@ -677,9 +683,9 @@ def _build_graph() -> object:
     """
     g = StateGraph(GraphState)
 
-    g.add_node("planner",       planner_node)
-    g.add_node("recon",         recon_node)
-    g.add_node("graph_builder", graph_builder_node)
+    g.add_node("planner",      planner_node)
+    g.add_node("recon",        recon_node)
+    g.add_node("attack_chain", attack_chain_node)
     g.add_node("sqli",      sqli_node)
     g.add_node("xss",       xss_node)
     g.add_node("static_c",  static_c_node)
