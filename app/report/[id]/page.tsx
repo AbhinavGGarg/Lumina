@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { Button } from "@/components/ui/button";
+import { MermaidDiagram } from "@/components/mermaid-diagram";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -45,26 +46,6 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? "✓ copied" : "copy"}
     </button>
-  );
-}
-
-// ── Pre block ─────────────────────────────────────────────────────────────────
-
-function PreBlock({ children }: { children?: React.ReactNode }) {
-  let text = "";
-  React.Children.forEach(children, (child) => {
-    if (React.isValidElement(child)) {
-      const props = child.props as { children?: React.ReactNode };
-      text = String(props.children ?? "").replace(/\n$/, "");
-    }
-  });
-  return (
-    <div className="relative my-5 group">
-      <pre className="rounded-xl bg-[#0d0d0d] border border-border/40 px-5 py-4 overflow-x-auto text-xs font-mono text-[#c9d1d9] leading-relaxed">
-        {children}
-      </pre>
-      {text && <CopyButton text={text} />}
-    </div>
   );
 }
 
@@ -127,11 +108,26 @@ const mdComponents: Components = {
     </ol>
   ),
   li: ({ children }) => <li className="leading-relaxed pl-1">{children}</li>,
-  pre: PreBlock as Components["pre"],
+  pre: ({ children }) => <>{children}</>,
   code: ({ className, children }) => {
-    if (className) {
-      return <code className={`${className} font-mono text-[#c9d1d9] text-xs`}>{children}</code>;
+    const value = String(children).replace(/\n$/, "");
+    const language = (className ?? "").replace("language-", "").toLowerCase();
+
+    if (language === "mermaid") {
+      return <MermaidDiagram chart={value} />;
     }
+
+    if (className) {
+      return (
+        <div className="relative my-5 group">
+          <pre className="rounded-xl bg-[#0d0d0d] border border-border/40 px-5 py-4 overflow-x-auto text-xs font-mono text-[#c9d1d9] leading-relaxed">
+            <code className={`${className} font-mono text-[#c9d1d9] text-xs`}>{children}</code>
+          </pre>
+          {value && <CopyButton text={value} />}
+        </div>
+      );
+    }
+
     return (
       <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-foreground">
         {children}
