@@ -230,12 +230,9 @@ export default function ScanPage() {
                 {scan.target}
               </span>
               {scan.architecture_summary && (
-                <div className="flex items-center gap-1.5 text-xs text-white/40 max-w-xl truncate">
-                  <span>Architecture:</span>
-                  <span
-                    className="font-mono text-white/70 bg-white/5 px-1.5 py-px rounded border border-white/10 truncate"
-                    title={scan.architecture_summary}
-                  >
+                <div className="flex items-start gap-1.5 text-sm text-white/40">
+                  <span className="shrink-0 mt-px">Architecture:</span>
+                  <span className="font-mono text-sm text-white/70 bg-white/5 px-1.5 py-px rounded border border-white/10 leading-relaxed">
                     {scan.architecture_summary}
                   </span>
                 </div>
