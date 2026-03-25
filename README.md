@@ -1,6 +1,6 @@
-# Pulse — Autonomous Penetration Testing Platform
+# Lumina — Autonomous Penetration Testing Platform
 
-Pulse is an AI-orchestrated penetration testing platform that combines a LangGraph state machine, industry-standard security tooling, and LLM interpretation into a single automated pipeline. Point it at a web target or a local repository and it will fingerprint the stack, dynamically select the relevant scanners, interpret raw tool output with an LLM, build an attack chain graph, and deliver a structured vulnerability report — all streamed live to the UI.
+Lumina is an AI-orchestrated penetration testing platform that combines a LangGraph state machine, industry-standard security tooling, and LLM interpretation into a single automated pipeline. Point it at a web target or a local repository and it will fingerprint the stack, dynamically select the relevant scanners, interpret raw tool output with an LLM, build an attack chain graph, and deliver a structured vulnerability report — all streamed live to the UI.
 
 ## How it works
 
@@ -61,7 +61,7 @@ docker compose -f docker-compose.dev.yml up -d --build
 The backend volume-mounts `./backend` so Python code changes hot-reload without a rebuild. If you change environment variables, prompts, or the Dockerfile, restart the container:
 
 ```bash
-docker restart pulse-dev-backend
+docker restart lumina-dev-backend
 ```
 
 ### 2. Start the frontend
@@ -89,8 +89,8 @@ Submit a repository root URL directly:
 https://github.com/owner/repository
 ```
 
-Pulse clones the repository inside the backend container runtime (named Docker
-volume mounted at `/var/pulse/repos`) and scans that snapshot. Nothing is
+Lumina clones the repository inside the backend container runtime (named Docker
+volume mounted at `/var/lumina/repos`) and scans that snapshot. Nothing is
 cloned into your local workspace.
 
 **Local repository:**
@@ -107,10 +107,10 @@ The dev compose file mounts `/tmp` and `/Users` read-only into the backend conta
 
 ```bash
 # Stream backend logs
-docker logs pulse-dev-backend -f
+docker logs lumina-dev-backend -f
 
 # Restart backend (after env/prompt changes)
-docker restart pulse-dev-backend
+docker restart lumina-dev-backend
 
 # Stop everything
 docker compose -f docker-compose.dev.yml down

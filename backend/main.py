@@ -1,11 +1,11 @@
-"""Pulse — Agentic Penetration Testing System — FastAPI backend."""
+"""Lumina — Agentic Penetration Testing System — FastAPI backend."""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .routers.scan_router import router as scan_router
 
-app = FastAPI(title="Pulse Pentest API")
+app = FastAPI(title="Lumina Pentest API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,7 +18,7 @@ app.add_middleware(
 @app.get("/hello")
 def hello():
     """Health check — kept for backwards compatibility."""
-    return {"message": "Pulse Pentest API is running"}
+    return {"message": "Lumina Pentest API is running"}
 
 
 app.include_router(scan_router)

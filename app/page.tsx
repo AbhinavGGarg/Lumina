@@ -24,7 +24,7 @@ export default function Home() {
               transition={{ duration: 0.4 }}
               className="text-5xl md:text-6xl lg:text-7xl font-serif tracking-tight leading-[1.1] bg-gradient-to-r from-white via-white to-purple-200/90 bg-clip-text text-transparent"
             >
-              Pulse
+              Lumina
             </motion.h1>
             <motion.h2
               initial={{ opacity: 0, y: 20 }}
@@ -42,7 +42,7 @@ export default function Home() {
               transition={{ duration: 0.4, delay: 0.2 }}
               className="text-sm md:text-base text-white/50 max-w-lg leading-relaxed font-light mt-2"
             >
-              Pulse is a LangGraph orchestrated security system. We dispatch
+              Lumina is a LangGraph orchestrated security system. We dispatch
               specialised agents running{" "}
               <span className="text-white/80 font-medium tracking-wide">
                 httpx, nmap, sqlmap, dalfox, and semgrep

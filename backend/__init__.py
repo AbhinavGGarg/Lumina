@@ -1,1 +1,1 @@
-"""Pulse backend package."""
+"""Lumina backend package."""

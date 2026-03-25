@@ -12,7 +12,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
   const [hasError, setHasError] = useState(false);
 
   const renderId = useMemo(
-    () => `pulse-mermaid-${Math.random().toString(36).slice(2, 10)}`,
+    () => `lumina-mermaid-${Math.random().toString(36).slice(2, 10)}`,
     [],
   );
 

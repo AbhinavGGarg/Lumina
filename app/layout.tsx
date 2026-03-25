@@ -21,7 +21,7 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Pulse",
+  title: "Lumina",
   description: "Autonomous penetration testing with agent-driven workflows",
   icons: {
     icon: "/image.png",

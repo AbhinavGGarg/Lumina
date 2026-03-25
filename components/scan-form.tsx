@@ -56,7 +56,7 @@ export function ScanForm() {
               type="text"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
-              placeholder="http://localhost:3001 or /repos/my-app or https://github.com/owner/repo"
+              placeholder="http://localhost:3001 or /repos/lumina or https://github.com/owner/repo"
               className="flex-1 min-w-0 bg-transparent border-none text-white px-2 py-3.5 outline-none placeholder:text-white/20 font-mono text-sm"
             />
           </div>

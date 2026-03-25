@@ -21,13 +21,13 @@ export function SiteHeader() {
             <span className="relative inline-flex h-10 w-10 items-center justify-center overflow-hidden">
               <img
                 src="/image.png?v=2"
-                alt="Pulse logo"
+                alt="Lumina logo"
                 width={32}
                 height={32}
                 className="h-8 w-8 object-contain"
               />
             </span>
-            <span>Pulse</span>
+            <span>Lumina</span>
           </Link>
         </div>
       </div>

@@ -207,7 +207,7 @@ export default function ReportPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `pulse-report-${id?.slice(0, 8)}.md`;
+    a.download = `lumina-report-${id?.slice(0, 8)}.md`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -251,7 +251,7 @@ export default function ReportPage() {
         <div className="page-shell">
           <div className="page-container flex h-14 items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
-              <span className="text-sm font-semibold shrink-0">Pulse</span>
+              <span className="text-sm font-semibold shrink-0">Lumina</span>
               <span className="text-border/60 shrink-0">|</span>
               <span className="text-xs text-muted-foreground font-mono truncate">{target}</span>
             </div>
@@ -287,7 +287,7 @@ export default function ReportPage() {
               </span>
             )}
             <span className="text-muted-foreground">
-              <span className="text-foreground font-semibold mr-1.5">Tool</span>Pulse Pentest v0.1
+              <span className="text-foreground font-semibold mr-1.5">Tool</span>Lumina Pentest v0.1
             </span>
           </div>
 
