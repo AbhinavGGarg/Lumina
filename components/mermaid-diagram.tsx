@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useId } from "react";
 import mermaid from "mermaid";
 
 interface MermaidDiagramProps {
@@ -10,10 +10,11 @@ interface MermaidDiagramProps {
 export function MermaidDiagram({ chart }: MermaidDiagramProps) {
   const [svg, setSvg] = useState<string>("");
   const [hasError, setHasError] = useState(false);
+  const reactId = useId();
 
   const renderId = useMemo(
-    () => `lumina-mermaid-${Math.random().toString(36).slice(2, 10)}`,
-    [],
+    () => `lumina-mermaid-${reactId.replace(/[:]/g, "")}`,
+    [reactId],
   );
 
   useEffect(() => {
@@ -25,7 +26,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
           startOnLoad: false,
           theme: "dark",
           securityLevel: "strict",
-          fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto",
+          fontFamily: "var(--font-geist-sans), ui-sans-serif",
         });
 
         const { svg: rendered } = await mermaid.render(renderId, chart);

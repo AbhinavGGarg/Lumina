@@ -1,173 +1,246 @@
+import {
+  Activity,
+  Binary,
+  FileCode2,
+  FileSearch,
+  Fingerprint,
+  Globe,
+  Link2,
+  PackageSearch,
+  Radar,
+  ShieldCheck,
+} from "lucide-react";
 import { ScanState } from "@/types/scan";
 
-// All possible agent nodes with display metadata.
-const AGENT_META: Record<string, { label: string; icon: string; tools: string }> = {
-  planner:          { label: "Planner",           icon: "🧠", tools: "language detection" },
-  recon:            { label: "Recon",             icon: "🌐", tools: "httpx · nmap · whatweb" },
-  attack_chain:     { label: "Attack Chain",       icon: "⛓️",  tools: "LLM reasoning" },
-  sqli:             { label: "SQL Injection",      icon: "💉", tools: "sqlmap" },
-  sql_injection:    { label: "SQL Injection",      icon: "💉", tools: "sqlmap" },
-  xss:              { label: "XSS",               icon: "🎯", tools: "dalfox" },
-  static_c:         { label: "C/C++ Analysis",    icon: "🔬", tools: "cppcheck · semgrep p/c" },
-  static:           { label: "Static Analysis",   icon: "🔬", tools: "semgrep · bandit" },
-  static_analysis:  { label: "Static Analysis",   icon: "🔬", tools: "semgrep · bandit" },
-  deps_py:          { label: "Python Deps",       icon: "📦", tools: "pip-audit" },
-  deps_js:          { label: "JS Deps",           icon: "📦", tools: "npm audit" },
-  deps:             { label: "Dependencies",      icon: "📦", tools: "pip-audit · npm audit" },
-  dependencies:     { label: "Dependencies",      icon: "📦", tools: "pip-audit · npm audit" },
-  secrets:          { label: "Secrets",           icon: "🔐", tools: "trufflehog · detect-secrets" },
-  report:           { label: "Report",            icon: "📄", tools: "LLM synthesis" },
-};
+type AgentStatus = "idle" | "queued" | "running" | "completed" | "issue";
 
 interface Props {
   scan: ScanState;
-  now?: number; // current Unix timestamp (seconds) — passed from parent to avoid per-component timers
+  now?: number;
 }
+
+const AGENT_META: Record<
+  string,
+  {
+    label: string;
+    tools: string;
+    icon: typeof Radar;
+  }
+> = {
+  planner: {
+    label: "Planner",
+    tools: "Target fingerprint + adaptive plan",
+    icon: Fingerprint,
+  },
+  recon: {
+    label: "Recon",
+    tools: "httpx + nmap + whatweb",
+    icon: Globe,
+  },
+  sqli: {
+    label: "SQL Injection",
+    tools: "sqlmap",
+    icon: Binary,
+  },
+  xss: {
+    label: "XSS",
+    tools: "dalfox",
+    icon: Radar,
+  },
+  static_c: {
+    label: "C/C++ Static",
+    tools: "cppcheck + semgrep",
+    icon: FileCode2,
+  },
+  static: {
+    label: "Static Analysis",
+    tools: "semgrep + bandit",
+    icon: FileSearch,
+  },
+  deps_py: {
+    label: "Python Dependencies",
+    tools: "pip-audit",
+    icon: PackageSearch,
+  },
+  deps_js: {
+    label: "JavaScript Dependencies",
+    tools: "npm audit",
+    icon: PackageSearch,
+  },
+  secrets: {
+    label: "Secrets",
+    tools: "trufflehog + detect-secrets",
+    icon: ShieldCheck,
+  },
+  attack_chain: {
+    label: "Attack Chain",
+    tools: "MITRE ATT&CK inference",
+    icon: Link2,
+  },
+  report: {
+    label: "Report",
+    tools: "LLM synthesis",
+    icon: Activity,
+  },
+};
+
+const ALIASES: Record<string, string> = {
+  sql_injection: "sqli",
+  static_analysis: "static",
+  dependencies: "deps_py",
+  complete: "report",
+};
 
 function normalizeAgentKey(agentKey: string): string {
-  const aliases: Record<string, string> = {
-    sql_injection: "sqli",
-    static_analysis: "static",
-    dependencies: "deps",
-    complete: "report",
-  };
-
-  return aliases[agentKey] ?? agentKey;
+  return ALIASES[agentKey] ?? agentKey;
 }
 
-function agentStatus(
-  agentKey: string,
-  scan: ScanState,
-): "done" | "running" | "queued" | "skipped" {
-  const normalizedAgent = normalizeAgentKey(agentKey);
+function fmtSecs(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
 
-  // Planner is a synthetic first step and not part of agents_plan.
-  // Mark it done as soon as planning output is available.
-  if (normalizedAgent === "planner") {
-    if (scan.current_agent === "planner") return "running";
-
-    const planningComplete =
-      Boolean(scan.architecture_summary?.trim()) ||
-      scan.agents_plan.length > 0;
-
-    if (planningComplete) return "done";
-    return "queued";
+function statusClass(status: AgentStatus): string {
+  switch (status) {
+    case "running":
+      return "text-cyan-200 border-cyan-300/35 bg-cyan-300/10";
+    case "completed":
+      return "text-emerald-200 border-emerald-300/35 bg-emerald-300/10";
+    case "issue":
+      return "text-amber-200 border-amber-300/35 bg-amber-300/10";
+    case "queued":
+      return "text-violet-200 border-violet-300/35 bg-violet-300/10";
+    default:
+      return "text-slate-300 border-slate-300/25 bg-white/8";
   }
-
-  // Normalise "complete" marker used by backend when fully done.
-  const current = normalizeAgentKey(scan.current_agent);
-
-  if (scan.status === "complete") return "done";
-  if (current === normalizedAgent) return "running";
-
-  // Determine ordering from the live plan, falling back to render order.
-  const planOrder =
-    scan.agents_plan.length > 0
-      ? scan.agents_plan.map(normalizeAgentKey)
-      : [];
-  const currentIdx = planOrder.indexOf(current);
-  const agentIdx   = planOrder.indexOf(normalizedAgent);
-
-  if (agentIdx !== -1 && currentIdx !== -1 && agentIdx < currentIdx) return "done";
-  return "queued";
 }
 
-/** Format seconds as "1m 23s" or "45s". */
-function fmtSecs(s: number): string {
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
+function statusLabel(status: AgentStatus): string {
+  switch (status) {
+    case "running":
+      return "running";
+    case "completed":
+      return "completed";
+    case "issue":
+      return "issue found";
+    case "queued":
+      return "queued";
+    default:
+      return "idle";
+  }
 }
 
 export function ScanProgress({ scan, now }: Props) {
-  const planKeys =
-    scan.agents_plan.length > 0
-      ? ["planner", ...scan.agents_plan]
-      : Object.keys(AGENT_META);
+  const normalizedPlan = scan.agents_plan.map(normalizeAgentKey).filter((key, index, arr) => arr.indexOf(key) === index);
+  const executionPlan = ["planner", ...normalizedPlan].filter((key, index, arr) => arr.indexOf(key) === index && AGENT_META[key]);
 
-  const visibleAgents = planKeys
-    .filter((key) => AGENT_META[key])
-    .map((key) => ({ key, ...AGENT_META[key] }));
+  const visibleAgents =
+    executionPlan.length > 0
+      ? executionPlan
+      : ["planner", "recon", "sqli", "xss", "static", "deps_py", "deps_js", "secrets", "attack_chain", "report"];
 
-  // Build a timing label per agent.
-  const timingLabel = (key: string, status: "done" | "running" | "queued" | "skipped"): string | null => {
-    const startedAt = scan.agent_timings?.[key];
+  const current = normalizeAgentKey(scan.current_agent);
+  const currentIndex = executionPlan.indexOf(current);
+
+  const findingsByAgent = scan.findings.reduce<Record<string, number>>((acc, finding) => {
+    const key = normalizeAgentKey(finding.agent);
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  function getStatus(agent: string): AgentStatus {
+    if (agent === "planner") {
+      const planned = Boolean(scan.architecture_summary?.trim()) || normalizedPlan.length > 0;
+      if (current === "planner") return "running";
+      if (planned) return "completed";
+      return "queued";
+    }
+
+    const inPlan = executionPlan.includes(agent);
+    if (!inPlan) return "idle";
+
+    if (current === agent && scan.status !== "complete") return "running";
+
+    const agentIndex = executionPlan.indexOf(agent);
+    const agentCompleted =
+      scan.status === "complete" ||
+      (currentIndex !== -1 && agentIndex !== -1 && agentIndex < currentIndex);
+
+    if (agentCompleted) {
+      return findingsByAgent[agent] ? "issue" : "completed";
+    }
+
+    return "queued";
+  }
+
+  function getTiming(agent: string, status: AgentStatus): string | null {
+    const startedAt = scan.agent_timings?.[agent];
     if (!startedAt) return null;
 
     if (status === "running" && now) {
-      const elapsed = Math.max(0, Math.floor(now - startedAt));
-      return `${fmtSecs(elapsed)}`;
+      return fmtSecs(Math.max(0, Math.floor(now - startedAt)));
     }
 
-    if (status === "done") {
-      // Estimate duration: find the next agent in the plan that has a timing.
-      const planKeys2 = scan.agents_plan ?? [];
-      const idx = planKeys2.indexOf(key);
-      let nextStart: number | null = null;
-      for (let i = idx + 1; i < planKeys2.length; i++) {
-        const t = scan.agent_timings?.[planKeys2[i]];
-        if (t) { nextStart = t; break; }
+    if ((status === "completed" || status === "issue") && now) {
+      const order = executionPlan;
+      const idx = order.indexOf(agent);
+      let nextStart: number | undefined;
+      for (let i = idx + 1; i < order.length; i += 1) {
+        const probe = scan.agent_timings?.[order[i]];
+        if (probe) {
+          nextStart = probe;
+          break;
+        }
       }
-      // Fall back to using now if scan is complete.
-      if (!nextStart && scan.status === "complete" && now) nextStart = now;
-      if (nextStart) {
-        const dur = Math.max(0, Math.floor(nextStart - startedAt));
-        return `${fmtSecs(dur)}`;
-      }
+      const end = nextStart ?? now;
+      return fmtSecs(Math.max(0, Math.floor(end - startedAt)));
     }
 
     return null;
-  };
+  }
 
   return (
-    <div className="flex flex-col gap-1 w-full">
-      {visibleAgents.map((agent) => {
-        const status = agentStatus(agent.key, scan);
-        const timing = timingLabel(agent.key, status);
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+      {visibleAgents.map((agentKey) => {
+        const meta = AGENT_META[agentKey];
+        const Icon = meta.icon;
+        const status = getStatus(agentKey);
+        const timing = getTiming(agentKey, status);
+        const findingCount = findingsByAgent[agentKey] ?? 0;
+
         return (
-          <div
-            key={agent.key}
-            className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-muted/40 border border-border/50"
+          <article
+            key={agentKey}
+            className="surface-panel-muted border-white/10 px-3.5 py-3 transition-all hover:border-cyan-300/20"
           >
-            <div className="flex items-center gap-3">
-              <span className="text-base w-6 text-center">{agent.icon}</span>
-              <div>
-                <p className="text-sm font-medium leading-tight">{agent.label}</p>
-                <p className="text-xs text-muted-foreground">{agent.tools}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {timing && (
-                <span className={`text-[10px] font-mono tabular-nums ${status === "running" ? "text-blue-400/80" : "text-white/25"}`}>
-                  {timing}
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md border border-white/10 bg-white/8 p-1.5 text-cyan-200">
+                  <Icon className="h-3.5 w-3.5" />
                 </span>
-              )}
-              <StatusBadge status={status} />
+                <p className="text-sm font-medium text-slate-100">{meta.label}</p>
+              </div>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${statusClass(status)}`}
+              >
+                {status === "running" ? (
+                  <span className="status-dot h-1.5 w-1.5 animate-pulse bg-current" />
+                ) : null}
+                {statusLabel(status)}
+              </span>
             </div>
-          </div>
+
+            <p className="text-[11px] leading-relaxed text-slate-400">{meta.tools}</p>
+
+            <div className="mt-2 flex items-center justify-between text-[10px] font-mono text-slate-500">
+              <span>
+                findings: <span className="text-slate-300">{findingCount}</span>
+              </span>
+              {timing ? <span>{timing}</span> : <span>--</span>}
+            </div>
+          </article>
         );
       })}
     </div>
   );
-}
-
-function StatusBadge({
-  status,
-}: {
-  status: "done" | "running" | "queued" | "skipped";
-}) {
-  switch (status) {
-    case "done":
-      return <span className="text-sm text-green-600 font-medium">✓ Done</span>;
-    case "running":
-      return (
-        <span className="text-sm text-blue-500 font-medium flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
-          Running
-        </span>
-      );
-    case "skipped":
-      return <span className="text-xs text-muted-foreground">— skipped</span>;
-    default:
-      return <span className="text-sm text-muted-foreground">○ Queued</span>;
-  }
 }
