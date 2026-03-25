@@ -79,6 +79,7 @@ If the frontend is deployed separately from the backend, configure one of these:
 
 - `NEXT_PUBLIC_API_URL=https://your-backend-domain` (direct browser calls), or
 - `BACKEND_API_URL=https://your-backend-domain` (uses Next.js `/api/*` rewrite proxy)
+- `CORS_ALLOW_ORIGINS=https://your-frontend-domain` on the backend (required for direct browser calls)
 
 Without one of these, scan requests from the deployed UI will fail.
 
