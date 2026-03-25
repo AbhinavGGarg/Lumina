@@ -2,8 +2,8 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
-function isLocalHost(hostname: string): boolean {
-  return hostname === "localhost" || hostname === "127.0.0.1";
+function normalizeApiBase(value: string): string {
+  return trimTrailingSlash(value).replace(/\/api$/, "");
 }
 
 /**
@@ -17,11 +17,7 @@ function isLocalHost(hostname: string): boolean {
 export function getApiBaseUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (explicit) {
-    return trimTrailingSlash(explicit);
-  }
-
-  if (typeof window !== "undefined" && isLocalHost(window.location.hostname)) {
-    return "http://localhost:8000";
+    return normalizeApiBase(explicit);
   }
 
   return "";

@@ -113,7 +113,7 @@ export function ScanForm() {
       if (err instanceof TypeError && err.message.toLowerCase().includes("fetch")) {
         if (!apiBase && typeof window !== "undefined") {
           toast.error(
-            "Cannot reach backend API. Set NEXT_PUBLIC_API_URL (or configure BACKEND_API_URL rewrite) in your deployment.",
+            "Cannot reach backend API. Set BACKEND_API_URL in deployment (or NEXT_PUBLIC_API_URL for direct calls).",
           );
         } else {
           toast.error("Network error: unable to reach scan backend.");
