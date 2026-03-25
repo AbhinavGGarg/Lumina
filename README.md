@@ -83,6 +83,24 @@ If the frontend is deployed separately from the backend, configure one of these:
 
 Without one of these, scan requests from the deployed UI will fail.
 
+### No-pay quick fix (works today)
+
+If you do not want paid APIs/hosting, run backend locally and expose it with a free tunnel:
+
+1. Start backend locally
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+```
+2. Expose backend with a free tunnel (Cloudflare)
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
+3. Copy tunnel URL and set Vercel env:
+```bash
+BACKEND_API_URL=https://<your-tunnel-url>
+```
+4. Redeploy frontend.
+
 ## Scanning targets
 
 **Web target (Juice Shop):**

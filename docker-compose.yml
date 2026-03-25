@@ -28,7 +28,7 @@ services:
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-6}
-      - ALLOWED_TARGETS=${ALLOWED_TARGETS:-target,localhost,127.0.0.1}
+      - ALLOWED_TARGETS=${ALLOWED_TARGETS:-target,localhost,127.0.0.1,example.com,scanme.nmap.org}
       - REPO_CLONE_ROOT=/var/lumina/repos
       - REPO_CLONE_TIMEOUT_SECONDS=${REPO_CLONE_TIMEOUT_SECONDS:-180}
       - REPO_CLONE_DEPTH=${REPO_CLONE_DEPTH:-1}

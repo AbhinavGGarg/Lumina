@@ -22,8 +22,8 @@ services:
       - REPO_CLONE_ROOT=/var/lumina/repos
       - REPO_CLONE_TIMEOUT_SECONDS=${REPO_CLONE_TIMEOUT_SECONDS:-180}
       - REPO_CLONE_DEPTH=${REPO_CLONE_DEPTH:-1}
-      # Make sure the backend allows scanning host.docker.internal and the target container
-      - ALLOWED_TARGETS=${ALLOWED_TARGETS:-target,host.docker.internal,localhost,127.0.0.1}
+      # Allow local dev targets plus the built-in public demo URLs from the frontend
+      - ALLOWED_TARGETS=${ALLOWED_TARGETS:-target,host.docker.internal,localhost,127.0.0.1,example.com,scanme.nmap.org}
     volumes:
       # Hot reload the code so you don't have to rebuild docker on every python change
       - ./backend:/app/backend:ro
