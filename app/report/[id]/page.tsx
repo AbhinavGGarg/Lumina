@@ -9,8 +9,7 @@ import { Calendar, Download, FileText, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { PlatformShell, GlassPanel, SectionHeading } from "@/components/platform-shell";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { apiUrl } from "@/lib/api";
 
 const SEVERITY_STYLES: Record<string, string> = {
   critical: "bg-red-500/15 text-red-200 border border-red-400/35 font-semibold",
@@ -151,8 +150,8 @@ export default function ReportPage() {
     async function load() {
       try {
         const [reportRes, scanRes] = await Promise.all([
-          fetch(`${API}/api/scan/${id}/report`),
-          fetch(`${API}/api/scan/${id}`),
+          fetch(apiUrl(`/api/scan/${id}/report`)),
+          fetch(apiUrl(`/api/scan/${id}`)),
         ]);
 
         const reportData = await reportRes.json();

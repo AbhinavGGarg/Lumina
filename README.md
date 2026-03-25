@@ -73,6 +73,15 @@ pnpm dev
 
 Frontend: `http://localhost:3000`
 
+## Hosted frontend setup (Vercel/Netlify)
+
+If the frontend is deployed separately from the backend, configure one of these:
+
+- `NEXT_PUBLIC_API_URL=https://your-backend-domain` (direct browser calls), or
+- `BACKEND_API_URL=https://your-backend-domain` (uses Next.js `/api/*` rewrite proxy)
+
+Without one of these, scan requests from the deployed UI will fail.
+
 ## Scanning targets
 
 **Web target (Juice Shop):**
@@ -102,6 +111,13 @@ cp -r /path/to/your/repo /tmp/myrepo
 ```
 
 The dev compose file mounts `/tmp` and `/Users` read-only into the backend container.
+
+### Default allowlisted public examples
+
+Out-of-the-box allowlist includes:
+
+- `example.com`
+- `scanme.nmap.org`
 
 ## Useful Docker commands
 

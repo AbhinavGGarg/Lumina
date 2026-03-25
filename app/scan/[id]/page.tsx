@@ -24,8 +24,8 @@ import { NmapPortMap } from "@/components/nmap-port-map";
 import { AttackChainGraph } from "@/components/attack-chain-graph";
 import { ReportModal } from "@/components/report-modal";
 import { Finding, ScanState } from "@/types/scan";
+import { apiUrl } from "@/lib/api";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"] as const;
 
 type SeverityKey = (typeof SEVERITY_ORDER)[number];
@@ -221,7 +221,7 @@ export default function ScanPage() {
   useEffect(() => {
     if (!id) return;
 
-    const es = new EventSource(`${API}/api/scan/${id}/stream`);
+    const es = new EventSource(apiUrl(`/api/scan/${id}/stream`));
 
     es.onmessage = (event) => {
       try {
@@ -256,7 +256,7 @@ export default function ScanPage() {
     setReportError(null);
 
     try {
-      const response = await fetch(`${API}/api/scan/${id}/report`);
+      const response = await fetch(apiUrl(`/api/scan/${id}/report`));
       const data = await response.json();
       setReportMarkdown(data.report || "No report generated.");
     } catch {

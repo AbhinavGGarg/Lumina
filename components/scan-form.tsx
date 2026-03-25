@@ -4,24 +4,23 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, Globe, Github, Play, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { apiUrl, getApiBaseUrl, parseErrorDetail } from "@/lib/api";
 
 const EXAMPLE_TARGETS = [
   {
-    label: "Juice Shop",
-    value: "http://localhost:3001",
+    label: "Scanme",
+    value: "https://scanme.nmap.org",
+    hint: "URL target",
+  },
+  {
+    label: "Example.com",
+    value: "https://example.com",
     hint: "URL target",
   },
   {
     label: "GitHub Repo",
     value: "https://github.com/trottomv/python-insecure-app",
     hint: "Repository target",
-  },
-  {
-    label: "Local Path",
-    value: "/tmp/myrepo",
-    hint: "Mounted local repo",
   },
 ] as const;
 
@@ -84,6 +83,7 @@ export function ScanForm() {
   const router = useRouter();
   const [target, setTarget] = useState("");
   const [loading, setLoading] = useState(false);
+  const apiBase = useMemo(() => getApiBaseUrl(), []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -95,22 +95,32 @@ export function ScanForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API}/api/scan`, {
+      const res = await fetch(apiUrl("/api/scan"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target: target.trim() }),
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail ?? "Failed to start scan");
+        const detail = await parseErrorDetail(res);
+        throw new Error(detail);
       }
 
       const data = await res.json();
       toast.success("Scan started");
       router.push(`/scan/${data.scan_id}`);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to start scan");
+      if (err instanceof TypeError && err.message.toLowerCase().includes("fetch")) {
+        if (!apiBase && typeof window !== "undefined") {
+          toast.error(
+            "Cannot reach backend API. Set NEXT_PUBLIC_API_URL (or configure BACKEND_API_URL rewrite) in your deployment.",
+          );
+        } else {
+          toast.error("Network error: unable to reach scan backend.");
+        }
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to start scan");
+      }
       setLoading(false);
     }
   }
